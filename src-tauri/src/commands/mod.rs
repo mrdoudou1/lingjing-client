@@ -73,9 +73,16 @@ pub async fn gateway_refresh_models(
         .lock()
         .map_err(|_| "secret lock poisoned")?
         .get(&profile.api_key_ref)?;
-    crate::gateways::http::GatewayHttpClient::default()
+    let models = crate::gateways::http::GatewayHttpClient::default()
         .list_models(&profile, key.as_deref())
-        .await
+        .await?;
+    state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?
+        .save_model_snapshots(&profile.id, &models)
+        .map_err(|error| error.to_string())?;
+    Ok(models)
 }
 
 #[tauri::command]

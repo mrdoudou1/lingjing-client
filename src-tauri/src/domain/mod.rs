@@ -39,6 +39,17 @@ pub struct GatewayProfile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelSnapshot {
+    pub id: String,
+    pub gateway_profile_id: String,
+    pub model_id: String,
+    pub display_name: Option<String>,
+    pub capabilities_json: serde_json::Value,
+    pub raw_json: Option<serde_json::Value>,
+    pub last_synced_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerationJob {
     pub id: Uuid,
     pub gateway_profile_id: String,

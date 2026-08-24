@@ -1,4 +1,4 @@
-use crate::domain::{ChatSession, GatewayProfile};
+use crate::domain::{ChatSession, GatewayProfile, ModelSnapshot};
 use rusqlite::{params, Connection, Result as SqlResult};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
@@ -107,6 +107,10 @@ impl SqliteStore {
                api_key_ref TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, is_default INTEGER NOT NULL DEFAULT 0,
                created_at TEXT NOT NULL, updated_at TEXT NOT NULL
              );
+             CREATE TABLE IF NOT EXISTS model_snapshots (
+               id TEXT PRIMARY KEY, gateway_profile_id TEXT NOT NULL, model_id TEXT NOT NULL,
+               display_name TEXT, capabilities_json TEXT NOT NULL, raw_json TEXT, last_synced_at TEXT NOT NULL
+             );
              CREATE TABLE IF NOT EXISTS generation_jobs (
                id TEXT PRIMARY KEY, gateway_profile_id TEXT NOT NULL, kind TEXT NOT NULL,
                operation TEXT, model_id TEXT, status TEXT NOT NULL, progress REAL NOT NULL DEFAULT 0,
@@ -161,6 +165,58 @@ impl SqliteStore {
                 is_default: row.get::<_, i64>(6)? != 0,
                 created_at: Some(row.get(7)?),
                 updated_at: Some(row.get(8)?),
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn save_model_snapshots(&self, profile_id: &str, models: &[String]) -> SqlResult<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        for model_id in models {
+            let snapshot = ModelSnapshot {
+                id: format!("{profile_id}:{model_id}"),
+                gateway_profile_id: profile_id.to_string(),
+                model_id: model_id.clone(),
+                display_name: None,
+                capabilities_json: serde_json::json!({}),
+                raw_json: None,
+                last_synced_at: now.clone(),
+            };
+            let capabilities = serde_json::to_string(&snapshot.capabilities_json)
+                .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+            let raw = snapshot
+                .raw_json
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+            self.connection.execute(
+                "INSERT INTO model_snapshots(id,gateway_profile_id,model_id,display_name,capabilities_json,raw_json,last_synced_at)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7)
+                 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,
+                 capabilities_json=excluded.capabilities_json,raw_json=excluded.raw_json,last_synced_at=excluded.last_synced_at",
+                params![snapshot.id, snapshot.gateway_profile_id, snapshot.model_id, snapshot.display_name, capabilities, raw, snapshot.last_synced_at],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn list_model_snapshots(&self, profile_id: &str) -> SqlResult<Vec<ModelSnapshot>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id,gateway_profile_id,model_id,display_name,capabilities_json,raw_json,last_synced_at
+             FROM model_snapshots WHERE gateway_profile_id=?1 ORDER BY model_id ASC",
+        )?;
+        let rows = statement.query_map(params![profile_id], |row| {
+            let capabilities: String = row.get(4)?;
+            let raw: Option<String> = row.get(5)?;
+            Ok(ModelSnapshot {
+                id: row.get(0)?,
+                gateway_profile_id: row.get(1)?,
+                model_id: row.get(2)?,
+                display_name: row.get(3)?,
+                capabilities_json: serde_json::from_str(&capabilities).unwrap_or_default(),
+                raw_json: raw.and_then(|value| serde_json::from_str(&value).ok()),
+                last_synced_at: row.get(6)?,
             })
         })?;
         rows.collect()
@@ -489,5 +545,17 @@ mod tests {
         assert_eq!(restored[0].messages[0].content, "hello");
         store.delete_chat_session("session-1").unwrap();
         assert!(store.list_chat_sessions().unwrap().is_empty());
+    }
+
+    #[test]
+    fn model_snapshots_refresh_by_gateway() {
+        let store = SqliteStore::in_memory().expect("sqlite should initialize");
+        store
+            .save_model_snapshots("gateway-1", &["gpt-4.1".into(), "flux-pro".into()])
+            .unwrap();
+        let snapshots = store.list_model_snapshots("gateway-1").unwrap();
+        assert_eq!(snapshots.len(), 2);
+        assert_eq!(snapshots[0].gateway_profile_id, "gateway-1");
+        assert_eq!(snapshots[1].capabilities_json, serde_json::json!({}));
     }
 }
