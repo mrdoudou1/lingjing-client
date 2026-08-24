@@ -1,6 +1,7 @@
 use rusqlite::{params, Connection, Result as SqlResult};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 #[derive(Default)]
 pub struct SettingsStore {
@@ -41,6 +42,37 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
+    pub fn open(path: impl AsRef<Path>) -> SqlResult<Self> {
+        if let Some(parent) = path.as_ref().parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+        }
+        let connection = Connection::open(path)?;
+        let store = Self { connection };
+        store.migrate()?;
+        Ok(store)
+    }
+
+    pub fn default_path() -> PathBuf {
+        if let Ok(app_data) = std::env::var("APPDATA") {
+            return PathBuf::from(app_data)
+                .join("Lingjing")
+                .join("db")
+                .join("lingjing.sqlite");
+        }
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home)
+                .join(".lingjing")
+                .join("db")
+                .join("lingjing.sqlite");
+        }
+        PathBuf::from("lingjing.sqlite")
+    }
+
+    pub fn open_default() -> SqlResult<Self> {
+        Self::open(Self::default_path())
+    }
+
     pub fn in_memory() -> SqlResult<Self> {
         let connection = Connection::open_in_memory()?;
         let store = Self { connection };

@@ -25,7 +25,7 @@ pub fn run() {
             assets: Mutex::new(assets::AssetStore::default()),
             settings: Mutex::new(persistence::SettingsStore::default()),
             database: Mutex::new(
-                persistence::SqliteStore::in_memory().expect("sqlite init failed"),
+                persistence::SqliteStore::open_default().expect("sqlite init failed"),
             ),
             secrets: Mutex::new(persistence::SecretStore::default()),
         })
