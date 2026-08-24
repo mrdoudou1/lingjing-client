@@ -5,7 +5,7 @@ import { gatewayRegistry } from '../../services/gateway/registry'
 import { ChatService } from '../../services/chat/chatService'
 import { appPersistence } from '../../services/persistence/persistence'
 import { tauriBridge } from '../../services/tauri/bridge'
-import { useDefaultGateway } from '../gateways/useDefaultGateway'
+import { useGatewayModels } from '../gateways/useGatewayModels'
 
 const service = new ChatService(gatewayRegistry.runtime())
 const initialSession = (gatewayProfileId = 'mock-default'): ChatSession => {
@@ -14,10 +14,11 @@ const initialSession = (gatewayProfileId = 'mock-default'): ChatSession => {
 }
 
 export function useChatWorkspace() {
-  const defaultGatewayId = useDefaultGateway()
+  const modelState = useGatewayModels('chat')
+  const defaultGatewayId = modelState.gatewayProfileId
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState('')
-  const [models, setModels] = useState<string[]>(['gpt-4.1'])
+  const models = modelState.models
   const [isStreaming, setIsStreaming] = useState(false)
   const controller = useRef<AbortController | null>(null)
 
@@ -29,12 +30,11 @@ export function useChatWorkspace() {
       }
       return appPersistence.get<ChatSession[]>('chat-sessions')
     }
-    void Promise.all([loadSessions(), gatewayRegistry.runtime().listModels(defaultGatewayId)]).then(([saved, availableModels]) => {
+    void loadSessions().then(saved => {
       if (!mounted) return
       const restored = saved?.length ? saved : [initialSession(defaultGatewayId)]
       setSessions(restored)
       setActiveSessionId(restored[0].id)
-      setModels(['gpt-4.1', ...availableModels.filter(model => model !== 'gpt-4.1')])
     })
     return () => { mounted = false; controller.current?.abort() }
   }, [defaultGatewayId])

@@ -2,16 +2,18 @@ import { useEffect, useState } from 'react'
 import { gatewayRegistry } from '../../services/gateway/registry'
 import { useDefaultGateway } from './useDefaultGateway'
 
-export type GatewayModelKind = 'image' | 'video' | 'audio'
+export type GatewayModelKind = 'chat' | 'image' | 'video' | 'audio'
 
 const fallbackModels: Record<GatewayModelKind, string[]> = {
+  chat: ['gpt-4.1'],
   image: ['grok-imagine-image-2.0', 'flux-pro', 'gpt-image-1'],
   video: ['grok-imagine-video', 'veo-3', 'sora-2'],
   audio: ['mock-audio', 'tts-1', 'whisper-1'],
 }
 
-function matchesKind(model: string, kind: GatewayModelKind) {
+function matchesKind(model: string, kind: GatewayModelKind): boolean {
   const normalized = model.toLowerCase()
+  if (kind === 'chat') return !matchesKind(model, 'image') && !matchesKind(model, 'video') && !matchesKind(model, 'audio')
   if (kind === 'image') return normalized.includes('image') || normalized.includes('flux')
   if (kind === 'video') return normalized.includes('video') || normalized.includes('veo') || normalized.includes('sora')
   return normalized.includes('audio') || normalized.includes('speech') || normalized.includes('tts') || normalized.includes('whisper')
