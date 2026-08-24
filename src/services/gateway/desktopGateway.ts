@@ -3,15 +3,17 @@ import type { GatewayAdapter, VideoRequest } from './types'
 import { tauriBridge } from '../tauri/bridge'
 
 function capabilitiesFor(modelId: string): ModelCapabilities {
-  if (modelId.includes('image') || modelId.includes('flux')) return { image: { count: { min: 1, max: 4, default: 1 }, aspectRatios: ['1 : 1', '16 : 9', '9 : 16'], resolutions: ['1k', '2k'], qualities: ['draft', 'standard', 'high'], supportsEdit: true } }
-  if (modelId.includes('audio') || modelId.includes('speech')) return { tts: { voices: ['Aria · 温暖女声', 'River · 平静男声'], formats: ['MP3', 'WAV'], streaming: false }, stt: { languages: ['中文（普通话）', 'English'], formats: ['TXT', 'JSON', 'SRT', 'VTT'], timestamps: true, realtime: false } }
-  return { video: { operations: ['generate', 'edit', 'extend'], durations: [6, 12, 18], aspectRatios: ['16:9', '9:16', '1:1'], resolutions: ['720p', '1080p'], maxReferenceImages: 3, maxReferenceVoices: 1 } }
+  const normalized = modelId.toLowerCase()
+  if (normalized.includes('image') || normalized.includes('flux')) return { image: { count: { min: 1, max: 4, default: 1 }, aspectRatios: ['1 : 1', '16 : 9', '9 : 16'], resolutions: ['1k', '2k'], qualities: ['draft', 'standard', 'high'], supportsEdit: true } }
+  if (normalized.includes('audio') || normalized.includes('speech') || normalized.includes('tts') || normalized.includes('whisper')) return { tts: { voices: ['Aria · 温暖女声', 'River · 平静男声'], formats: ['MP3', 'WAV'], streaming: false }, stt: { languages: ['中文（普通话）', 'English'], formats: ['TXT', 'JSON', 'SRT', 'VTT'], timestamps: true, realtime: false } }
+  if (normalized.includes('video') || normalized.includes('veo') || normalized.includes('sora')) return { video: { operations: ['generate', 'edit', 'extend'], durations: [6, 12, 18], aspectRatios: ['16:9', '9:16', '1:1'], resolutions: ['720p', '1080p'], maxReferenceImages: 3, maxReferenceVoices: 1 } }
+  return { chat: { streaming: true, markdown: true } }
 }
 
 export class DesktopGatewayAdapter implements GatewayAdapter {
-  async testConnection() { return tauriBridge.invoke<{ ok: boolean; latencyMs: number }>('gateway_test_connection', { profileId: 'mock-default' }) }
-  async listModels() { return tauriBridge.invoke<string[]>('gateway_refresh_models', { profileId: 'mock-default' }) }
-  async resolveCapabilities(modelId: string) { return capabilitiesFor(modelId) }
+  async testConnection(gatewayProfileId = 'mock-default') { return tauriBridge.invoke<{ ok: boolean; latencyMs: number }>('gateway_test_connection', { profileId: gatewayProfileId }) }
+  async listModels(gatewayProfileId = 'mock-default') { return tauriBridge.invoke<string[]>('gateway_refresh_models', { profileId: gatewayProfileId }) }
+  async resolveCapabilities(modelId: string, _gatewayProfileId?: string) { return capabilitiesFor(modelId) }
   async *chatStream(request: ChatRequest, signal?: AbortSignal): AsyncGenerator<ChatDelta> {
     const last = request.messages.at(-1)?.content ?? ''
     const sessionId = request.sessionId ?? 'desktop-session'

@@ -5,14 +5,16 @@ import { gatewayRegistry } from '../../services/gateway/registry'
 import { ChatService } from '../../services/chat/chatService'
 import { appPersistence } from '../../services/persistence/persistence'
 import { tauriBridge } from '../../services/tauri/bridge'
+import { useDefaultGateway } from '../gateways/useDefaultGateway'
 
 const service = new ChatService(gatewayRegistry.runtime())
-const initialSession = (): ChatSession => {
+const initialSession = (gatewayProfileId = 'mock-default'): ChatSession => {
   const now = new Date().toISOString()
-  return { id: createId('session'), title: '新的聊天', modelId: 'gpt-4.1', gatewayProfileId: 'mock-default', messages: [], createdAt: now, updatedAt: now }
+  return { id: createId('session'), title: '新的聊天', modelId: 'gpt-4.1', gatewayProfileId, messages: [], createdAt: now, updatedAt: now }
 }
 
 export function useChatWorkspace() {
+  const defaultGatewayId = useDefaultGateway()
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState('')
   const [models, setModels] = useState<string[]>(['gpt-4.1'])
@@ -27,15 +29,15 @@ export function useChatWorkspace() {
       }
       return appPersistence.get<ChatSession[]>('chat-sessions')
     }
-    void Promise.all([loadSessions(), gatewayRegistry.runtime().listModels()]).then(([saved, availableModels]) => {
+    void Promise.all([loadSessions(), gatewayRegistry.runtime().listModels(defaultGatewayId)]).then(([saved, availableModels]) => {
       if (!mounted) return
-      const restored = saved?.length ? saved : [initialSession()]
+      const restored = saved?.length ? saved : [initialSession(defaultGatewayId)]
       setSessions(restored)
       setActiveSessionId(restored[0].id)
       setModels(['gpt-4.1', ...availableModels.filter(model => model !== 'gpt-4.1')])
     })
     return () => { mounted = false; controller.current?.abort() }
-  }, [])
+  }, [defaultGatewayId])
 
   useEffect(() => {
     let unlisten: (() => void) | undefined
@@ -90,8 +92,8 @@ export function useChatWorkspace() {
   }, [activeSession, isStreaming, send])
 
   const stop = useCallback(() => controller.current?.abort(), [])
-  const createSession = useCallback(() => { const next = initialSession(); persist(previous => [next, ...previous]); setActiveSessionId(next.id) }, [persist])
-  const deleteSession = useCallback((sessionId: string) => { const normalized = sessions.filter(session => session.id !== sessionId); const next = normalized.length ? normalized : [initialSession()]; persist(next); if (tauriBridge.available()) void tauriBridge.invoke('chat_delete_session', { id: sessionId }).catch(() => {}); if (activeSessionId === sessionId) setActiveSessionId(next[0].id) }, [activeSessionId, persist, sessions])
+  const createSession = useCallback(() => { const next = initialSession(defaultGatewayId); persist(previous => [next, ...previous]); setActiveSessionId(next.id) }, [defaultGatewayId, persist])
+  const deleteSession = useCallback((sessionId: string) => { const normalized = sessions.filter(session => session.id !== sessionId); const next = normalized.length ? normalized : [initialSession(defaultGatewayId)]; persist(next); if (tauriBridge.available()) void tauriBridge.invoke('chat_delete_session', { id: sessionId }).catch(() => {}); if (activeSessionId === sessionId) setActiveSessionId(next[0].id) }, [activeSessionId, defaultGatewayId, persist, sessions])
   const setModel = useCallback((modelId: string) => { if (!activeSession) return; updateSession(activeSession.id, session => ({ ...session, modelId })) }, [activeSession, updateSession])
 
   return { sessions, activeSession, activeSessionId, setActiveSessionId, models, isStreaming, send, regenerate, stop, createSession, deleteSession, setModel }

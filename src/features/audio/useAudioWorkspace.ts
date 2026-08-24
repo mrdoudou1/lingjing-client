@@ -3,12 +3,14 @@ import type { AudioRequest, ModelCapabilities, Notify } from '../../types/domain
 import { gatewayRegistry } from '../../services/gateway/registry'
 import { AudioJobService } from '../../services/jobs/audioJobService'
 import { validateAudioRequest } from './audioValidation'
+import { useDefaultGateway } from '../gateways/useDefaultGateway'
 
 const adapter = gatewayRegistry.runtime()
 const audioJobs = new AudioJobService(adapter)
 const audioCapabilities: ModelCapabilities = { tts: { voices: ['Aria · 温暖女声', 'River · 平静男声'], formats: ['MP3', 'WAV'], streaming: false }, stt: { languages: ['中文（普通话）', 'English'], formats: ['TXT', 'JSON', 'SRT', 'VTT'], timestamps: true, realtime: false } }
 
 export function useAudioWorkspace(notify: Notify) {
+  const gatewayProfileId = useDefaultGateway()
   const [tab, setTab] = useState<'tts' | 'stt'>('tts')
   const [text, setText] = useState('')
   const [voice, setVoice] = useState('Aria · 温暖女声')
@@ -18,11 +20,11 @@ export function useAudioWorkspace(notify: Notify) {
   const [status, setStatus] = useState<'idle' | 'running' | 'succeeded' | 'failed'>('idle')
   const [progress, setProgress] = useState(0)
   const request = useCallback(async (): Promise<AudioRequest> => {
-    if (tab === 'tts') return { gatewayProfileId: 'mock-default', modelId: 'mock-audio', kind: 'tts', text, voice, format }
+    if (tab === 'tts') return { gatewayProfileId, modelId: 'mock-audio', kind: 'tts', text, voice, format }
     const bytes = sourceFile ? new Uint8Array(await sourceFile.arrayBuffer()) : undefined
     const binary = bytes ? Array.from(bytes, byte => String.fromCharCode(byte)).join('') : undefined
-    return { gatewayProfileId: 'mock-default', modelId: 'mock-audio', kind: 'stt', sourceFileName: sourceFile?.name, sourceFileBase64: binary ? btoa(binary) : undefined, language, format }
-  }, [format, language, sourceFile, tab, text, voice])
+    return { gatewayProfileId, modelId: 'mock-audio', kind: 'stt', sourceFileName: sourceFile?.name, sourceFileBase64: binary ? btoa(binary) : undefined, language, format }
+  }, [format, gatewayProfileId, language, sourceFile, tab, text, voice])
   const submit = useCallback(async () => {
     const input = await request(); const validation = validateAudioRequest(input, audioCapabilities)
     if (!validation.ok) return notify(validation.message)

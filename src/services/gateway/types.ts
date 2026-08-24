@@ -17,9 +17,9 @@ export interface VideoRequest {
 }
 
 export interface GatewayAdapter {
-  testConnection(): Promise<{ ok: boolean; latencyMs: number }>
-  listModels(): Promise<string[]>
-  resolveCapabilities(modelId: string): Promise<ModelCapabilities>
+  testConnection(gatewayProfileId?: string): Promise<{ ok: boolean; latencyMs: number }>
+  listModels(gatewayProfileId?: string): Promise<string[]>
+  resolveCapabilities(modelId: string, gatewayProfileId?: string): Promise<ModelCapabilities>
   chatStream(request: ChatRequest, signal?: AbortSignal): AsyncGenerator<ChatDelta>
   createImageJob(request: ImageRequest): Promise<GenerationJob<ImageRequest>>
   createAudioJob(request: AudioRequest): Promise<GenerationJob<AudioRequest>>

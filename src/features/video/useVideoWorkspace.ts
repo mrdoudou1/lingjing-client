@@ -6,11 +6,13 @@ import { validateVideoRequest } from './videoValidation'
 import { VideoJobService } from '../../services/jobs/videoJobService'
 import { useModelCapabilities } from '../gateways/useModelCapabilities'
 import { tauriBridge } from '../../services/tauri/bridge'
+import { useDefaultGateway } from '../gateways/useDefaultGateway'
 
 const adapter = gatewayRegistry.runtime()
 const videoJobs = new VideoJobService(adapter)
 
 export function useVideoWorkspace(notify: Notify) {
+  const gatewayProfileId = useDefaultGateway()
   const [operation, setOperation] = useState<VideoOperation>('generate')
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('grok-imagine-video')
@@ -27,7 +29,7 @@ export function useVideoWorkspace(notify: Notify) {
   const capabilityState = useModelCapabilities(model)
   const selectModel = useCallback(async (nextModel: string) => {
     setModel(nextModel)
-    const video = (await adapter.resolveCapabilities(nextModel)).video
+    const video = (await adapter.resolveCapabilities(nextModel, gatewayProfileId)).video
     if (!video) return
     setOperation(previous => video.operations.includes(previous) ? previous : video.operations[0] ?? previous)
     setDurationSec(previous => video.durations?.includes(previous) ? previous : video.durations?.[0] ?? previous)
@@ -35,7 +37,7 @@ export function useVideoWorkspace(notify: Notify) {
     setResolution(previous => video.resolutions.includes(previous) ? previous : video.resolutions[0] ?? previous)
     if ((video.maxReferenceVoices ?? 0) === 0) setReferenceVoiceIds([])
     notify(`已切换模型：${nextModel}，参数已按能力校正`)
-  }, [notify])
+  }, [gatewayProfileId, notify])
 
   useEffect(() => () => { if (jobId && status === 'running') videoJobs.cancel(jobId) }, [jobId, status])
   useEffect(() => {
@@ -48,8 +50,8 @@ export function useVideoWorkspace(notify: Notify) {
   const selectReferenceImage = useCallback(() => { setReferenceImageAssetIds(['asset-reference-demo']); setFirstFrameAssetId(''); notify('已选择示例参考图') }, [notify])
   const toggleReferenceVoice = useCallback(() => { setReferenceVoiceIds(previous => previous.length ? [] : ['voice-demo']); notify(referenceVoiceIds.length ? '已移除参考音色' : '已选择示例参考音色') }, [notify, referenceVoiceIds.length])
   const start = useCallback(async () => {
-    const request: VideoRequest = { gatewayProfileId: 'mock-default', modelId: model, operation, inputMode: firstFrameAssetId ? 'image-to-video' : referenceImageAssetIds.length ? 'reference-to-video' : 'text-to-video', prompt, firstFrameAssetId: firstFrameAssetId || undefined, referenceImageAssetIds, referenceVoiceIds, sourceVideoAssetId: sourceVideoAssetId || undefined, durationSec, extensionDurationSec: operation === 'extend' ? durationSec : undefined, aspectRatio, resolution }
-    const capabilities = await adapter.resolveCapabilities(request.modelId)
+    const request: VideoRequest = { gatewayProfileId, modelId: model, operation, inputMode: firstFrameAssetId ? 'image-to-video' : referenceImageAssetIds.length ? 'reference-to-video' : 'text-to-video', prompt, firstFrameAssetId: firstFrameAssetId || undefined, referenceImageAssetIds, referenceVoiceIds, sourceVideoAssetId: sourceVideoAssetId || undefined, durationSec, extensionDurationSec: operation === 'extend' ? durationSec : undefined, aspectRatio, resolution }
+    const capabilities = await adapter.resolveCapabilities(request.modelId, gatewayProfileId)
     const validation = validateVideoRequest(request, capabilities)
     if (!validation.ok) return notify(validation.message)
     setStatus('running'); setProgress(0)
@@ -59,7 +61,7 @@ export function useVideoWorkspace(notify: Notify) {
       if (result.status === 'succeeded') notify('视频生成成功，结果已写入素材库')
       if (result.status === 'canceled') notify('视频任务已取消')
     } catch { setStatus('failed'); notify('视频任务失败，请重试') }
-  }, [aspectRatio, durationSec, firstFrameAssetId, model, notify, operation, prompt, referenceImageAssetIds, referenceVoiceIds, resolution, sourceVideoAssetId])
+  }, [aspectRatio, durationSec, firstFrameAssetId, gatewayProfileId, model, notify, operation, prompt, referenceImageAssetIds, referenceVoiceIds, resolution, sourceVideoAssetId])
   const cancel = useCallback(() => { if (jobId) videoJobs.cancel(jobId) }, [jobId])
   const retry = useCallback(async () => { if (!jobId) return; setStatus('running'); setProgress(0); try { const result = await videoJobs.retry(jobId, state => { setProgress(state.progress); setStatus(state.status === 'canceled' ? 'canceled' : state.status === 'succeeded' ? 'succeeded' : 'running') }, setJobId); if (result.status === 'succeeded') notify('视频任务重试完成') } catch { setStatus('failed'); notify('视频重试失败') } }, [jobId, notify])
   return { operation, setOperation: selectOperation, prompt, setPrompt, model, setModel, selectModel, durationSec, setDurationSec, aspectRatio, setAspectRatio, resolution, setResolution, sourceVideoAssetId, setSourceVideoAssetId, progress, status, jobId, referenceImageAssetIds, referenceVoiceIds, capabilities: capabilityState.capabilities.video, capabilitiesLoading: capabilityState.loading, selectFirstFrame, selectReferenceImage, toggleReferenceVoice, start, cancel, retry }

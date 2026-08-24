@@ -15,9 +15,15 @@ const audioCapabilities: ModelCapabilities = {
 }
 
 export class MockGatewayAdapter implements GatewayAdapter {
-  async testConnection() { return { ok: true, latencyMs: 42 } }
-  async listModels() { return ['gpt-4.1', 'grok-imagine-image-2.0', 'flux-pro', 'gpt-image-1', 'grok-imagine-video', 'veo-3', 'sora-2'] }
-  async resolveCapabilities(modelId: string) { return modelId.includes('image') || modelId.includes('flux') ? imageCapabilities : modelId.includes('audio') || modelId.includes('speech') ? audioCapabilities : videoCapabilities }
+  async testConnection(_gatewayProfileId?: string) { return { ok: true, latencyMs: 42 } }
+  async listModels(_gatewayProfileId?: string) { return ['gpt-4.1', 'grok-imagine-image-2.0', 'flux-pro', 'gpt-image-1', 'grok-imagine-video', 'veo-3', 'sora-2'] }
+  async resolveCapabilities(modelId: string, _gatewayProfileId?: string) {
+    const normalized = modelId.toLowerCase()
+    if (normalized.includes('image') || normalized.includes('flux')) return imageCapabilities
+    if (normalized.includes('audio') || normalized.includes('speech') || normalized.includes('tts') || normalized.includes('whisper')) return audioCapabilities
+    if (normalized.includes('video') || normalized.includes('veo') || normalized.includes('sora')) return videoCapabilities
+    return { chat: { streaming: true, markdown: true } }
+  }
   async *chatStream(request: ChatRequest, signal?: AbortSignal): AsyncGenerator<ChatDelta> {
     const last = request.messages.at(-1)?.content ?? ''
     const response = `已收到你的请求：**${last}**\n\n这是 Mock Gateway 的流式响应。接入真实网关时，只需要替换 GatewayAdapter，不需要改动聊天页面。`
