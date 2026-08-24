@@ -4,6 +4,7 @@ import { gatewayRegistry } from '../../services/gateway/registry'
 import type { VideoRequest } from '../../services/gateway/types'
 import { validateVideoRequest } from './videoValidation'
 import { VideoJobService } from '../../services/jobs/videoJobService'
+import { useModelCapabilities } from '../gateways/useModelCapabilities'
 
 const adapter = gatewayRegistry.runtime()
 const videoJobs = new VideoJobService(adapter)
@@ -22,6 +23,18 @@ export function useVideoWorkspace(notify: Notify) {
   const [jobId, setJobId] = useState('')
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState<'idle' | 'running' | 'succeeded' | 'failed' | 'canceled'>('idle')
+  const capabilityState = useModelCapabilities(model)
+  const selectModel = useCallback(async (nextModel: string) => {
+    setModel(nextModel)
+    const video = (await adapter.resolveCapabilities(nextModel)).video
+    if (!video) return
+    setOperation(previous => video.operations.includes(previous) ? previous : video.operations[0] ?? previous)
+    setDurationSec(previous => video.durations?.includes(previous) ? previous : video.durations?.[0] ?? previous)
+    setAspectRatio(previous => video.aspectRatios.includes(previous) ? previous : video.aspectRatios[0] ?? previous)
+    setResolution(previous => video.resolutions.includes(previous) ? previous : video.resolutions[0] ?? previous)
+    if ((video.maxReferenceVoices ?? 0) === 0) setReferenceVoiceIds([])
+    notify(`已切换模型：${nextModel}，参数已按能力校正`)
+  }, [notify])
 
   useEffect(() => () => { if (jobId && status === 'running') videoJobs.cancel(jobId) }, [jobId, status])
   const selectOperation = useCallback((next: VideoOperation) => { setOperation(next); setStatus('idle'); setProgress(0) }, [])
@@ -43,5 +56,5 @@ export function useVideoWorkspace(notify: Notify) {
   }, [aspectRatio, durationSec, firstFrameAssetId, model, notify, operation, prompt, referenceImageAssetIds, referenceVoiceIds, resolution, sourceVideoAssetId])
   const cancel = useCallback(() => { if (jobId) videoJobs.cancel(jobId) }, [jobId])
   const retry = useCallback(async () => { if (!jobId) return; setStatus('running'); setProgress(0); try { const result = await videoJobs.retry(jobId, state => { setProgress(state.progress); setStatus(state.status === 'canceled' ? 'canceled' : state.status === 'succeeded' ? 'succeeded' : 'running') }, setJobId); if (result.status === 'succeeded') notify('视频任务重试完成') } catch { setStatus('failed'); notify('视频重试失败') } }, [jobId, notify])
-  return { operation, setOperation: selectOperation, prompt, setPrompt, model, setModel, durationSec, setDurationSec, aspectRatio, setAspectRatio, resolution, setResolution, sourceVideoAssetId, setSourceVideoAssetId, progress, status, jobId, referenceImageAssetIds, referenceVoiceIds, selectFirstFrame, selectReferenceImage, toggleReferenceVoice, start, cancel, retry }
+  return { operation, setOperation: selectOperation, prompt, setPrompt, model, setModel, selectModel, durationSec, setDurationSec, aspectRatio, setAspectRatio, resolution, setResolution, sourceVideoAssetId, setSourceVideoAssetId, progress, status, jobId, referenceImageAssetIds, referenceVoiceIds, capabilities: capabilityState.capabilities.video, capabilitiesLoading: capabilityState.loading, selectFirstFrame, selectReferenceImage, toggleReferenceVoice, start, cancel, retry }
 }
