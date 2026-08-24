@@ -12,6 +12,7 @@ pub struct AppState {
     pub gateways: Mutex<gateways::GatewayRegistry>,
     pub assets: Mutex<assets::AssetStore>,
     pub settings: Mutex<persistence::SettingsStore>,
+    pub database: Mutex<persistence::SqliteStore>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -22,6 +23,9 @@ pub fn run() {
             gateways: Mutex::new(gateways::GatewayRegistry::default()),
             assets: Mutex::new(assets::AssetStore::default()),
             settings: Mutex::new(persistence::SettingsStore::default()),
+            database: Mutex::new(
+                persistence::SqliteStore::in_memory().expect("sqlite init failed"),
+            ),
         })
         .invoke_handler(tauri::generate_handler![
             commands::gateway_list_profiles,
