@@ -4,6 +4,7 @@ import { createId } from '../../lib/ids'
 import { gatewayRegistry } from '../../services/gateway/registry'
 import { ChatService } from '../../services/chat/chatService'
 import { appPersistence } from '../../services/persistence/persistence'
+import { tauriBridge } from '../../services/tauri/bridge'
 
 const service = new ChatService(gatewayRegistry.get('mock'))
 const initialSession = (): ChatSession => {
@@ -28,6 +29,12 @@ export function useChatWorkspace() {
       setModels(['gpt-4.1', ...availableModels.filter(model => model !== 'gpt-4.1')])
     })
     return () => { mounted = false; controller.current?.abort() }
+  }, [])
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+    void tauriBridge.listen<{ reason: string }>('app://shutdown', () => controller.current?.abort()).then(stop => { unlisten = stop }).catch(() => {})
+    return () => { unlisten?.() }
   }, [])
 
   const activeSession = useMemo(() => sessions.find(session => session.id === activeSessionId) ?? sessions[0], [activeSessionId, sessions])

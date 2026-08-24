@@ -5,6 +5,7 @@ import type { VideoRequest } from '../../services/gateway/types'
 import { validateVideoRequest } from './videoValidation'
 import { VideoJobService } from '../../services/jobs/videoJobService'
 import { useModelCapabilities } from '../gateways/useModelCapabilities'
+import { tauriBridge } from '../../services/tauri/bridge'
 
 const adapter = gatewayRegistry.runtime()
 const videoJobs = new VideoJobService(adapter)
@@ -37,6 +38,11 @@ export function useVideoWorkspace(notify: Notify) {
   }, [notify])
 
   useEffect(() => () => { if (jobId && status === 'running') videoJobs.cancel(jobId) }, [jobId, status])
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+    void tauriBridge.listen<{ reason: string }>('app://shutdown', () => { if (jobId) videoJobs.cancel(jobId) }).then(stop => { unlisten = stop }).catch(() => {})
+    return () => { unlisten?.() }
+  }, [jobId])
   const selectOperation = useCallback((next: VideoOperation) => { setOperation(next); setStatus('idle'); setProgress(0) }, [])
   const selectFirstFrame = useCallback(() => { setFirstFrameAssetId('asset-first-frame-demo'); setReferenceImageAssetIds([]); notify('已选择示例首帧图') }, [notify])
   const selectReferenceImage = useCallback(() => { setReferenceImageAssetIds(['asset-reference-demo']); setFirstFrameAssetId(''); notify('已选择示例参考图') }, [notify])
