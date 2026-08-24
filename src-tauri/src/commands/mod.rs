@@ -951,6 +951,38 @@ pub fn asset_open_location(
 }
 
 #[tauri::command]
+pub fn asset_export(id: String, state: State<'_, AppState>) -> Result<String, String> {
+    let asset = {
+        let assets = state.assets.lock().map_err(|_| "asset lock poisoned")?;
+        assets.list().into_iter().find(|asset| asset.id == id)
+    }
+    .ok_or_else(|| "ASSET_NOT_FOUND: asset metadata missing".to_string())?;
+    if asset.local_path.starts_with("mock://") {
+        return Err("ASSET_NOT_LOCAL: asset has no local file".into());
+    }
+    let source = std::path::Path::new(&asset.local_path);
+    let media = state.media.lock().map_err(|_| "media lock poisoned")?;
+    if !media.is_under_root(source) {
+        return Err("ASSET_EXPORT_BLOCKED: path is outside the asset store".into());
+    }
+    if !source.exists() {
+        return Err("ASSET_NOT_FOUND: local file does not exist".into());
+    }
+    let downloads = std::env::var("USERPROFILE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .join("Downloads");
+    std::fs::create_dir_all(&downloads).map_err(|error| format!("STORAGE_FAILED: {error}"))?;
+    let extension = source
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("bin");
+    let destination = downloads.join(format!("{id}.{extension}"));
+    std::fs::copy(source, &destination).map_err(|error| format!("DOWNLOAD_FAILED: {error}"))?;
+    Ok(destination.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 pub fn storage_usage(state: State<'_, AppState>) -> Result<u64, String> {
     let assets = state.assets.lock().map_err(|_| "asset lock poisoned")?;
     Ok(assets.usage())

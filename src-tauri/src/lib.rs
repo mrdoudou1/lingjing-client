@@ -75,6 +75,7 @@ pub fn run() {
             commands::asset_toggle_favorite,
             commands::asset_delete,
             commands::asset_open_location,
+            commands::asset_export,
             commands::storage_usage,
             commands::settings_get,
             commands::settings_update,
