@@ -6,3 +6,18 @@ export class MemoryPersistence implements PersistenceAdapter {
   async set<T>(key: string, value: T) { this.values.set(key, value) }
 }
 export const persistence = new MemoryPersistence()
+
+/** Browser persistence is limited to non-sensitive product state. API keys never enter this adapter. */
+export class BrowserPersistence implements PersistenceAdapter {
+  async get<T>(key: string) {
+    try {
+      const value = window.localStorage.getItem(`lingjing:${key}`)
+      return value ? JSON.parse(value) as T : null
+    } catch { return null }
+  }
+  async set<T>(key: string, value: T) {
+    window.localStorage.setItem(`lingjing:${key}`, JSON.stringify(value))
+  }
+}
+
+export const appPersistence: PersistenceAdapter = typeof window === 'undefined' ? persistence : new BrowserPersistence()

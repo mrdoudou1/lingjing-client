@@ -5,6 +5,38 @@ export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancele
 
 export type Notify = (message: string) => void
 
+export type ChatRole = 'user' | 'assistant' | 'system'
+export type ChatMessageStatus = 'streaming' | 'completed' | 'stopped' | 'failed'
+
+export interface ChatMessage {
+  id: string
+  role: ChatRole
+  content: string
+  status: ChatMessageStatus
+  createdAt: string
+}
+
+export interface ChatSession {
+  id: string
+  title: string
+  modelId: string
+  gatewayProfileId: string
+  messages: ChatMessage[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ChatRequest {
+  gatewayProfileId: string
+  modelId: string
+  messages: Array<Pick<ChatMessage, 'role' | 'content'>>
+}
+
+export interface ChatDelta {
+  delta: string
+  done: boolean
+}
+
 export interface GatewayProfile {
   id: string
   name: string
@@ -16,6 +48,7 @@ export interface GatewayProfile {
 }
 
 export interface ModelCapabilities {
+  chat?: { streaming: boolean; markdown: boolean }
   image?: { count?: { min: number; max: number; default: number }; aspectRatios: string[]; resolutions: string[]; qualities: string[]; supportsEdit: boolean }
   video?: { operations: VideoOperation[]; durations?: number[]; aspectRatios: string[]; resolutions: string[]; maxReferenceImages?: number; maxReferenceVoices?: number }
   tts?: { voices: string[]; formats: string[]; streaming: boolean }
