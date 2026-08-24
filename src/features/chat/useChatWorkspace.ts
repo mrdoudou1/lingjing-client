@@ -6,7 +6,7 @@ import { ChatService } from '../../services/chat/chatService'
 import { appPersistence } from '../../services/persistence/persistence'
 import { tauriBridge } from '../../services/tauri/bridge'
 
-const service = new ChatService(gatewayRegistry.get('mock'))
+const service = new ChatService(gatewayRegistry.runtime())
 const initialSession = (): ChatSession => {
   const now = new Date().toISOString()
   return { id: createId('session'), title: '新的聊天', modelId: 'gpt-4.1', gatewayProfileId: 'mock-default', messages: [], createdAt: now, updatedAt: now }
@@ -21,7 +21,13 @@ export function useChatWorkspace() {
 
   useEffect(() => {
     let mounted = true
-    void Promise.all([appPersistence.get<ChatSession[]>('chat-sessions'), gatewayRegistry.get('mock').listModels()]).then(([saved, availableModels]) => {
+    const loadSessions = async () => {
+      if (tauriBridge.available()) {
+        try { return await tauriBridge.invoke<ChatSession[]>('chat_list_sessions') } catch { /* browser fallback */ }
+      }
+      return appPersistence.get<ChatSession[]>('chat-sessions')
+    }
+    void Promise.all([loadSessions(), gatewayRegistry.runtime().listModels()]).then(([saved, availableModels]) => {
       if (!mounted) return
       const restored = saved?.length ? saved : [initialSession()]
       setSessions(restored)
@@ -41,7 +47,11 @@ export function useChatWorkspace() {
   const persist = useCallback((value: ChatSession[] | ((previous: ChatSession[]) => ChatSession[])) => {
     setSessions(previous => {
       const next = typeof value === 'function' ? value(previous) : value
-      void appPersistence.set('chat-sessions', next)
+      if (tauriBridge.available()) {
+        void Promise.all(next.map(session => tauriBridge.invoke('chat_save_session', { session }))).catch(() => {})
+      } else {
+        void appPersistence.set('chat-sessions', next)
+      }
       return next
     })
   }, [])
@@ -81,7 +91,7 @@ export function useChatWorkspace() {
 
   const stop = useCallback(() => controller.current?.abort(), [])
   const createSession = useCallback(() => { const next = initialSession(); persist(previous => [next, ...previous]); setActiveSessionId(next.id) }, [persist])
-  const deleteSession = useCallback((sessionId: string) => { const normalized = sessions.filter(session => session.id !== sessionId); const next = normalized.length ? normalized : [initialSession()]; persist(next); if (activeSessionId === sessionId) setActiveSessionId(next[0].id) }, [activeSessionId, persist, sessions])
+  const deleteSession = useCallback((sessionId: string) => { const normalized = sessions.filter(session => session.id !== sessionId); const next = normalized.length ? normalized : [initialSession()]; persist(next); if (tauriBridge.available()) void tauriBridge.invoke('chat_delete_session', { id: sessionId }).catch(() => {}); if (activeSessionId === sessionId) setActiveSessionId(next[0].id) }, [activeSessionId, persist, sessions])
   const setModel = useCallback((modelId: string) => { if (!activeSession) return; updateSession(activeSession.id, session => ({ ...session, modelId })) }, [activeSession, updateSession])
 
   return { sessions, activeSession, activeSessionId, setActiveSessionId, models, isStreaming, send, regenerate, stop, createSession, deleteSession, setModel }

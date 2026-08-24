@@ -107,6 +107,26 @@ pub struct ChatSendInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub id: String,
+    pub role: String,
+    pub content: String,
+    pub status: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSession {
+    pub id: String,
+    pub title: String,
+    pub model_id: String,
+    pub gateway_profile_id: String,
+    pub messages: Vec<ChatMessage>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Asset {
     pub id: String,
     pub job_id: Option<Uuid>,

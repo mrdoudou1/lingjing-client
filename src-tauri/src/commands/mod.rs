@@ -182,6 +182,44 @@ pub fn chat_send(input: ChatSendInput) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+pub fn chat_list_sessions(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::domain::ChatSession>, String> {
+    let database = state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?;
+    database
+        .list_chat_sessions()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn chat_save_session(
+    session: crate::domain::ChatSession,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let database = state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?;
+    database
+        .save_chat_session(&session)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn chat_delete_session(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let database = state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?;
+    database
+        .delete_chat_session(&id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub async fn chat_stream(
     app: AppHandle,
     input: ChatSendInput,
