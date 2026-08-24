@@ -64,6 +64,7 @@ pub fn run() {
             commands::job_get,
             commands::job_cancel,
             commands::job_retry,
+            commands::job_update,
             commands::job_list,
             commands::asset_list,
             commands::asset_register,

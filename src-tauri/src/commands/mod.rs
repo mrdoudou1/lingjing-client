@@ -382,6 +382,27 @@ pub fn job_retry(
 }
 
 #[tauri::command]
+pub fn job_update(
+    id: String,
+    status: String,
+    progress: f32,
+    error_message: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Option<crate::domain::GenerationJob>, String> {
+    let id = Uuid::parse_str(&id).map_err(|error| error.to_string())?;
+    let status: crate::domain::JobStatus =
+        serde_json::from_value(serde_json::Value::String(status))
+            .map_err(|_| "VALIDATION_FAILED: invalid job status".to_string())?;
+    let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
+    let result = jobs.update(id, status, progress, error_message);
+    drop(jobs);
+    if let Some(ref job) = result {
+        persist_job(state.inner(), job)?;
+    }
+    Ok(result)
+}
+
+#[tauri::command]
 pub fn job_list(
     kind: Option<String>,
     status: Option<String>,

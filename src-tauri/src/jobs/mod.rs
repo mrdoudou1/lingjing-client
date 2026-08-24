@@ -29,6 +29,20 @@ impl JobManager {
             job
         })
     }
+    pub fn update(
+        &mut self,
+        id: Uuid,
+        status: JobStatus,
+        progress: f32,
+        error_message: Option<String>,
+    ) -> Option<GenerationJob> {
+        self.jobs.get_mut(&id).map(|job| {
+            job.status = status;
+            job.progress = progress.clamp(0.0, 100.0);
+            job.error_message = error_message;
+            job.clone()
+        })
+    }
     pub fn list(&self, kind: Option<&str>, status: Option<&str>) -> Vec<GenerationJob> {
         self.jobs
             .values()
@@ -106,5 +120,22 @@ mod tests {
             manager.get(created.id).unwrap().status,
             JobStatus::Stopped
         ));
+    }
+
+    #[test]
+    fn update_persists_progress_and_error_state() {
+        let mut manager = JobManager::default();
+        let created = manager.insert(job());
+        let updated = manager
+            .update(
+                created.id,
+                JobStatus::Failed,
+                128.0,
+                Some("REMOTE_JOB_FAILED".into()),
+            )
+            .expect("job should exist");
+        assert!(matches!(updated.status, JobStatus::Failed));
+        assert_eq!(updated.progress, 100.0);
+        assert_eq!(updated.error_message.as_deref(), Some("REMOTE_JOB_FAILED"));
     }
 }
