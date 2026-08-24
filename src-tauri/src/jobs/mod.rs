@@ -29,4 +29,17 @@ impl JobManager {
             job
         })
     }
+    pub fn list(&self, kind: Option<&str>, status: Option<&str>) -> Vec<GenerationJob> {
+        self.jobs
+            .values()
+            .filter(|job| {
+                let kind_matches =
+                    kind.is_none_or(|value| format!("{:?}", job.kind).eq_ignore_ascii_case(value));
+                let status_matches = status
+                    .is_none_or(|value| format!("{:?}", job.status).eq_ignore_ascii_case(value));
+                kind_matches && status_matches
+            })
+            .cloned()
+            .collect()
+    }
 }

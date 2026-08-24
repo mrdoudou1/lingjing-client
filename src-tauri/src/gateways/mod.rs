@@ -28,8 +28,12 @@ impl GatewayRegistry {
     pub fn models(&self, _profile_id: &str) -> Vec<String> {
         vec![
             "gpt-4.1".into(),
+            "grok-imagine-image-2.0".into(),
+            "flux-pro".into(),
+            "gpt-image-1".into(),
             "grok-imagine-video".into(),
             "veo-3".into(),
+            "mock-audio".into(),
         ]
     }
     pub fn test(&self, _profile_id: &str) -> serde_json::Value {
@@ -79,6 +83,21 @@ impl GatewayRegistry {
             request_json: serde_json::to_value(request).unwrap_or_default(),
             error_message: None,
             created_at: Utc::now(),
+        }
+    }
+
+    pub fn create(&mut self, profile: GatewayProfile) {
+        self.profiles.insert(profile.id.clone(), profile);
+    }
+    pub fn update(&mut self, profile: GatewayProfile) {
+        self.profiles.insert(profile.id.clone(), profile);
+    }
+    pub fn delete(&mut self, id: &str) {
+        self.profiles.remove(id);
+    }
+    pub fn set_default(&mut self, id: &str) {
+        for profile in self.profiles.values_mut() {
+            profile.is_default = profile.id == id;
         }
     }
 }
