@@ -21,6 +21,55 @@ pub struct AppState {
     pub chat_stops: Mutex<HashMap<String, watch::Sender<bool>>>,
 }
 
+fn shutdown_active_work(app_handle: &tauri::AppHandle, state: &AppState) {
+    let _ = app_handle.emit(
+        "app://shutdown",
+        serde_json::json!({
+            "reason": "exit-requested",
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "correlationId": uuid::Uuid::new_v4().to_string(),
+        }),
+    );
+    if let Ok(stops) = state.chat_stops.lock() {
+        for sender in stops.values() {
+            let _ = sender.send(true);
+        }
+    }
+    let stopped = state
+        .jobs
+        .lock()
+        .map(|mut jobs| jobs.stop_all())
+        .unwrap_or_default();
+    let mut remote_jobs = Vec::new();
+    if let Ok(database) = state.database.lock() {
+        for job in &stopped {
+            let _ = database.save_snapshot("jobs", &job.id.to_string(), job);
+            if let Some(remote_id) = &job.remote_job_id {
+                remote_jobs.push((remote_id.clone(), job.gateway_profile_id.clone()));
+            }
+        }
+    }
+    for (remote_id, profile_id) in remote_jobs {
+        let profile = state
+            .gateways
+            .lock()
+            .ok()
+            .and_then(|registry| registry.profile(&profile_id));
+        let Some(profile) = profile else { continue };
+        let key = state
+            .secrets
+            .lock()
+            .ok()
+            .and_then(|secrets| secrets.get(&profile.api_key_ref).ok().flatten());
+        let client = gateways::http::GatewayHttpClient::default();
+        let _ = tauri::async_runtime::block_on(client.cancel_video(
+            &profile,
+            key.as_deref(),
+            &remote_id,
+        ));
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let database = persistence::SqliteStore::open_default().expect("sqlite init failed");
@@ -90,18 +139,7 @@ pub fn run() {
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 let state = app_handle.state::<AppState>();
-                if let Ok(mut jobs) = state.jobs.lock() {
-                    let stopped = jobs.stop_all();
-                    if let Ok(database) = state.database.lock() {
-                        for job in stopped {
-                            let _ = database.save_snapshot("jobs", &job.id.to_string(), &job);
-                        }
-                    }
-                }
-                let _ = app_handle.emit(
-                    "app://shutdown",
-                    serde_json::json!({ "reason": "exit-requested" }),
-                );
+                shutdown_active_work(app_handle, &state);
             }
         });
 }
