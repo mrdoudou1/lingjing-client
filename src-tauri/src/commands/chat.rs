@@ -95,8 +95,7 @@ pub async fn chat_stream(
         .chat_stream(
             &profile,
             key.as_deref(),
-            &input.model_id,
-            &input.content,
+            &input,
             stop_rx,
             |delta| {
                 event_app

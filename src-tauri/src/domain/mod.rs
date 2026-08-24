@@ -110,11 +110,19 @@ pub struct AudioRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatTurn {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSendInput {
     pub gateway_profile_id: String,
     pub model_id: String,
     pub session_id: String,
     pub content: String,
+    #[serde(default)]
+    pub messages: Vec<ChatTurn>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

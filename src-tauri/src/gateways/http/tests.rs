@@ -19,11 +19,17 @@ fn mock_chat_stream_honors_stop_signal() {
     };
     let (_stop_tx, stop_rx) = watch::channel(true);
     let mut deltas = 0;
+    let input = crate::domain::ChatSendInput {
+        gateway_profile_id: "mock-default".into(),
+        model_id: "gpt-4.1".into(),
+        session_id: "session-1".into(),
+        content: "hello".into(),
+        messages: Vec::new(),
+    };
     let result = runtime.block_on(GatewayHttpClient::default().chat_stream(
         &profile,
         None,
-        "gpt-4.1",
-        "hello",
+        &input,
         stop_rx,
         |_| {
             deltas += 1;

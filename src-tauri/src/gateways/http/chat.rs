@@ -1,12 +1,12 @@
 use super::*;
+use crate::domain::ChatSendInput;
 
 impl GatewayHttpClient {
     pub async fn chat_stream<F>(
         &self,
         profile: &GatewayProfile,
         api_key: Option<&str>,
-        model_id: &str,
-        content: &str,
+        input: &ChatSendInput,
         mut stop: watch::Receiver<bool>,
         mut on_delta: F,
     ) -> Result<(), String>
@@ -16,7 +16,7 @@ impl GatewayHttpClient {
         if profile.base_url.starts_with("mock://") {
             let reply = format!(
                 "已收到你的请求：**{}**\n\n这是 Rust Mock Gateway 的桌面流式响应。",
-                content.trim()
+                input.content.trim()
             );
             for chunk in reply.as_bytes().chunks(3) {
                 if *stop.borrow() {
@@ -29,7 +29,18 @@ impl GatewayHttpClient {
         }
         let endpoint = crate::gateways::adapters::adapter_for(profile).endpoint("chat/completions");
         let url = format!("{}/{endpoint}", profile.base_url.trim_end_matches('/'));
-        let mut request = self.client.post(url).header("Accept", "text/event-stream").json(&serde_json::json!({"model": model_id, "stream": true, "messages": [{"role": "user", "content": content}]}));
+        let chat_messages = if input.messages.is_empty() {
+            vec![serde_json::json!({ "role": "user", "content": input.content })]
+        } else {
+            input.messages.iter().map(|message| serde_json::json!({ "role": message.role, "content": message.content })).collect()
+        };
+        let mut request = self
+            .client
+            .post(url)
+            .header("Accept", "text/event-stream")
+            .json(
+                &serde_json::json!({"model": input.model_id, "stream": true, "messages": chat_messages}),
+            );
         if let Some(key) = api_key.filter(|key| !key.is_empty()) {
             request = request.bearer_auth(key);
         }

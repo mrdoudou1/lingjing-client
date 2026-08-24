@@ -35,7 +35,7 @@ export class DesktopGatewayAdapter implements GatewayAdapter {
     const abort = () => { completed = true; push(null); void tauriBridge.invoke('chat_stop', { sessionId }).catch(() => {}) }
     signal?.addEventListener('abort', abort, { once: true })
     try {
-      void tauriBridge.invoke('chat_stream', { input: { gateway_profile_id: request.gatewayProfileId, model_id: request.modelId, session_id: sessionId, content: last } }).catch(error => { streamError = error instanceof Error ? error : new Error(String(error)); completed = true; push(null) })
+      void tauriBridge.invoke('chat_stream', { input: { gateway_profile_id: request.gatewayProfileId, model_id: request.modelId, session_id: sessionId, content: last, messages: request.messages } }).catch(error => { streamError = error instanceof Error ? error : new Error(String(error)); completed = true; push(null) })
       while (!completed || queue.length) {
         if (signal?.aborted) return
         if (!queue.length) await new Promise<void>(resolve => { wake = resolve })
