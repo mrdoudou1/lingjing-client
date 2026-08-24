@@ -37,4 +37,8 @@ npm install
 npm run dev
 npm run build
 npm run lint
+
+# Windows 桌面开发
+npm run tauri:dev
+npm run tauri:build
 ```
