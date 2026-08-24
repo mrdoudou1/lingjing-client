@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
+<defs>
+  <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f7f8fb"/><stop offset="1" stop-color="#edf0f5"/></linearGradient>
+  <linearGradient id="art1" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#eec8a5"/><stop offset=".52" stop-color="#9c6d62"/><stop offset="1" stop-color="#273342"/></linearGradient>
+  <linearGradient id="art2" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a5d8cc"/><stop offset=".55" stop-color="#4f6f89"/><stop offset="1" stop-color="#182337"/></linearGradient>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#1b67f2"/><stop offset="1" stop-color="#7f8cff"/></linearGradient>
+  <filter id="shadow"><feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#1a2640" flood-opacity=".13"/></filter>
+</defs>
+<rect width="1440" height="1024" fill="url(#paper)"/>
+<g font-family="Segoe UI, Arial, sans-serif" fill="#172033">
+  <rect x="24" y="24" width="224" height="976" rx="30" fill="#ffffff" fill-opacity=".72" stroke="#d8dde7"/>
+  <text x="54" y="75" font-size="22" font-weight="700">Lingjing</text><text x="54" y="98" font-size="11" fill="#7a8494">Create quietly, beautifully.</text>
+  <rect x="44" y="133" width="184" height="44" rx="14" fill="#e9efff"/><text x="77" y="161" font-size="14" font-weight="650">聊天</text>
+  <rect x="44" y="191" width="184" height="44" rx="14" fill="#1b67f2"/><text x="77" y="219" font-size="14" font-weight="700" fill="#fff">图片</text>
+  <text x="54" y="276" font-size="14" fill="#6d7787">视频</text><text x="54" y="328" font-size="14" fill="#6d7787">TTS</text><text x="54" y="380" font-size="14" fill="#6d7787">素材库</text><text x="54" y="432" font-size="14" fill="#6d7787">历史记录</text>
+  <line x1="50" y1="884" x2="218" y2="884" stroke="#dfe3ea"/><text x="54" y="926" font-size="14" fill="#566173">设置</text><text x="54" y="958" font-size="11" fill="#9aa4b3">跟随系统外观</text>
+
+  <text x="292" y="76" font-size="29" font-weight="700">图片工作室</text><text x="292" y="106" font-size="13" fill="#778294">清晰的选择，安静的创作过程</text>
+  <rect x="1080" y="52" width="290" height="42" rx="15" fill="#fff" stroke="#dce2ec"/><circle cx="1106" cy="73" r="6" fill="#37bf72"/><text x="1123" y="79" font-size="12">NewAPI 主网关 · 已连接</text>
+
+  <rect x="292" y="144" width="392" height="830" rx="26" fill="#fff" filter="url(#shadow)"/>
+  <text x="322" y="190" font-size="14" font-weight="650">生成设置</text>
+  <text x="322" y="230" font-size="12" fill="#7b8697">提示词</text>
+  <rect x="322" y="245" width="332" height="116" rx="16" fill="#f6f7fa" stroke="#e0e4eb"/><text x="340" y="275" font-size="14">一束光穿过清晨的玻璃温室，</text><text x="340" y="300" font-size="14">桌面上有一杯咖啡，电影感。</text><text x="340" y="336" font-size="11" fill="#a0a8b5">0 / 2000</text>
+  <text x="322" y="405" font-size="12" fill="#7b8697">模型</text><rect x="322" y="420" width="332" height="40" rx="13" fill="#f6f7fa" stroke="#e0e4eb"/><text x="340" y="446" font-size="13">gpt-image · 高质量</text><text x="632" y="446" font-size="13" fill="#7e8ba0">⌄</text>
+  <text x="322" y="500" font-size="12" fill="#7b8697">比例</text><rect x="322" y="515" width="100" height="40" rx="12" fill="#eaf0ff" stroke="#a8c1ff"/><text x="354" y="541" font-size="13" fill="#1b67f2">1:1</text><rect x="438" y="515" width="100" height="40" rx="12" fill="#f7f8fa" stroke="#e0e4eb"/><text x="470" y="541" font-size="13">16:9</text><rect x="554" y="515" width="100" height="40" rx="12" fill="#f7f8fa" stroke="#e0e4eb"/><text x="588" y="541" font-size="13">9:16</text>
+  <text x="322" y="595" font-size="12" fill="#7b8697">分辨率</text><rect x="322" y="610" width="154" height="40" rx="12" fill="#1b67f2"/><text x="383" y="636" font-size="13" fill="#fff">1K</text><rect x="492" y="610" width="162" height="40" rx="12" fill="#f7f8fa" stroke="#e0e4eb"/><text x="557" y="636" font-size="13">2K</text>
+  <text x="322" y="690" font-size="12" fill="#7b8697">质量</text><rect x="322" y="705" width="332" height="40" rx="13" fill="#f6f7fa" stroke="#e0e4eb"/><text x="340" y="731" font-size="13">高质量</text><text x="632" y="731" font-size="13" fill="#7e8ba0">⌄</text>
+  <rect x="322" y="806" width="332" height="54" rx="17" fill="url(#blue)"/><text x="446" y="839" font-size="15" font-weight="700" fill="#fff">生成 4 张图片</text>
+  <text x="322" y="912" font-size="11" fill="#9aa4b3">生成后自动保存到素材库与历史记录</text>
+
+  <text x="730" y="190" font-size="14" font-weight="650">最近生成</text><text x="1282" y="190" font-size="12" fill="#7d8797">查看全部</text>
+  <rect x="730" y="214" width="282" height="336" rx="22" fill="url(#art1)" filter="url(#shadow)"/><rect x="1030" y="214" width="340" height="336" rx="22" fill="url(#art2)" filter="url(#shadow)"/>
+  <circle cx="878" cy="378" r="52" fill="#f9e0a9" opacity=".55"/><path d="M760 465 Q868 360 980 466" stroke="#f9d8b3" stroke-width="12" fill="none" opacity=".5"/>
+  <path d="M1090 470 Q1170 320 1316 406" stroke="#b6ebdf" stroke-width="18" fill="none" opacity=".55"/><circle cx="1170" cy="330" r="45" fill="#d1fff1" opacity=".35"/>
+  <rect x="730" y="574" width="640" height="268" rx="22" fill="#fff" filter="url(#shadow)"/><text x="758" y="616" font-size="13" font-weight="650">生成任务</text><circle cx="766" cy="660" r="6" fill="#1b67f2"/><text x="784" y="665" font-size="12">4 张图片 · gpt-image · 1K</text><text x="758" y="696" font-size="12" fill="#8993a2">一束光穿过清晨的玻璃温室……</text><rect x="758" y="736" width="584" height="8" rx="4" fill="#edf0f5"/><rect x="758" y="736" width="584" height="8" rx="4" fill="#4b83f4"/><text x="758" y="786" font-size="11" fill="#9aa4b3">已完成 · 12 秒前</text><rect x="1170" y="768" width="172" height="42" rx="13" fill="#f3f6ff"/><text x="1212" y="794" font-size="12" fill="#1b67f2">再次生成</text>
+</g></svg>

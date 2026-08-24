@@ -1,0 +1,2 @@
+import type { Notify } from '../types/domain'
+export function HistoryPage({ notify }: { notify: Notify }) { return <div className="library-page"><div className="page-heading"><div><span className="eyebrow">活动记录</span><h1>历史记录</h1></div><button className="light-button" onClick={() => notify('历史筛选已打开')}>筛选 ▾</button></div><div className="history-placeholder"><span>◷</span><h2>历史记录已整理</h2><p>在图库和视频库中查看完整任务详情。</p></div></div> }

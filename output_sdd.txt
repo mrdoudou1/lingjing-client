@@ -1,0 +1,1143 @@
+# Lingjing AI 创作客户端
+
+## 软件设计说明（SDD）
+
+**版本**：1.0.0  
+**状态**：可进入 MVP 设计与编码  
+**目标平台**：Windows 优先，预留 macOS/Linux  
+**产品形态**：纯桌面客户端，不开发独立云端业务后端
+
+---
+
+## 1. 文档目的
+
+本文档是 Lingjing 后续开发的单一事实来源（Single Source of Truth）。编码、代码评审、测试和验收均以此文档为准。
+
+本文档定义：
+
+- 产品范围、优先级和非目标；
+- Tauri 2 + React/TypeScript + Rust 架构；
+- NewAPI、Sub2API、grok2api 等网关接入方式；
+- 聊天、图片、视频、TTS/STT、素材库、历史记录功能；
+- 本地数据、密钥、任务、资产和缓存模型；
+- 模块边界、编码约束、测试策略、里程碑和验收标准。
+
+客户端不假设所有网关或上游的接口完全一致，通过 Gateway Adapter 和 Model Capability Resolver 做协议与能力转换。
+
+---
+
+## 2. 产品定位与原则
+
+Lingjing 是一个 Windows 优先、跨平台的 AI 创作客户端。用户输入一个或多个网关地址和 API Key，客户端从网关获取模型并调用上游能力。
+
+### 2.1 核心原则
+
+1. **纯客户端**：不开发 Go、ASP.NET 或其他独立云端服务。
+2. **网关优先**：NewAPI、Sub2API、grok2api 负责上游转发、配额和厂家密钥。
+3. **本地优先**：配置、会话、任务、生成参数、历史和媒体资产均保存在本机。
+4. **能力驱动**：根据模型/网关能力显示参数；不支持的参数隐藏或禁用。
+5. **低耦合**：页面、领域模型、适配器、任务、资产和持久化分层。
+6. **不卡顿**：网络、上传、下载、轮询、转码、缩略图和 SQLite I/O 不在 UI 线程执行。
+7. **可维护**：单文件原则上不超过 300 行；跨领域逻辑必须拆分。
+8. **当前不平台化**：不做画布、Agent、MCP、插件系统、账户和云端同步。
+
+---
+
+## 3. 功能信息架构
+
+左侧菜单顺序固定：
+
+1. 聊天
+2. 图片
+3. 视频
+4. TTS
+5. 素材库
+6. 历史记录
+
+底部设置区：
+
+- 网关配置；
+- API Key；
+- 主题；
+- 语言；
+- 本地存储占用；
+- 关于。
+
+### 3.1 优先级
+
+| 优先级 | 模块 | 首版范围 |
+|---|---|---|
+| P0 | 视频 | 生成、编辑、延长、模型切换、首帧图、参考图、参考音色、时长、比例、分辨率、进度、取消、重试、预览 |
+| P1 | 图片 | Grok/GPT Images 等模型、生成数量、比例、1K/2K、质量、预览、保存 |
+| P2 | 聊天 | 文本、流式输出、停止、重新生成、Markdown、会话历史 |
+| P3 | TTS | 语音合成与语音识别两个 Tab；TTS 合成播放；STT 文件识别 |
+| P4 | 资产/历史增强 | 搜索、分类、收藏、批量删除、导出等后续功能 |
+
+### 3.2 明确不做
+
+- 独立云端业务后端；
+- 无限画布、节点编排；
+- Agent、MCP、插件系统；
+- 用户账户、云端同步、多人协作；
+- 首版麦克风录音和实时 STT；
+- 退出后的后台任务继续或任务恢复；
+- 自动缓存容量上限。
+
+---
+
+## 4. 平台、主题和性能目标
+
+### 4.1 平台
+
+- 首发 Windows x64；
+- 目标 Windows 10 1809+ 和 Windows 11；
+- 预留 macOS/Linux；
+- 中文优先，代码预留国际化；
+- 深色、浅色、跟随系统三种主题，默认深色。
+
+### 4.2 性能目标
+
+| 指标 | 目标 |
+|---|---|
+| 冷启动 | 2 秒内显示主界面骨架，不等待模型列表和媒体 |
+| UI | 输入、滚动、切换、弹窗不被网络或转码阻塞 |
+| 图片/历史 | 必须使用虚拟化列表 |
+| 视频 | 默认只显示封面，不自动播放 |
+| 大文件 | 文件流和落盘处理，不用 Base64 作为内部媒体传输 |
+| 流式文本 | 30~50ms 聚合后批量更新 |
+| 任务进度 | 最高 5~10 次/秒 |
+| 并发 | 视频默认 2，图片 4，音频 4，下载 3 |
+| 退出 | 退出即停止本地任务和轮询，不驻留 |
+
+### 4.3 退出流程
+
+1. 禁止创建新任务；
+2. 取消本地 HTTP、SSE、轮询和 FFmpeg；
+3. 对支持取消的远程任务发送取消；
+4. 未完成任务标记为 stopped；
+5. 写入 SQLite 后退出；
+6. 已完成和已下载资产保留。
+
+---
+
+## 5. 总体架构
+
+~~~text
+┌──────────────────────────────────────────────────────────┐
+│ Lingjing Desktop Client                                  │
+│                                                          │
+│ React + TypeScript + Vite                               │
+│ ├─ AppShell / Sidebar / Pages                           │
+│ ├─ Feature UI                                            │
+│ ├─ Zustand UI state                                      │
+│ └─ TanStack Query server/task state                      │
+│                 │ Tauri invoke / events                  │
+│ Tauri 2 Rust Core                                        │
+│ ├─ Command Facade                                        │
+│ ├─ GatewayClient + Adapter Registry                      │
+│ ├─ ModelCapabilityResolver                               │
+│ ├─ JobManager + Tokio workers                            │
+│ ├─ AssetManager + FileCache                              │
+│ ├─ SQLite Repository                                     │
+│ ├─ OS Secret Store                                       │
+│ └─ FFmpeg Sidecar                                        │
+└───────────────┬──────────────────────────────────────────┘
+                │ HTTPS / SSE / WebSocket / multipart
+                ▼
+        NewAPI / Sub2API / grok2api / custom gateway
+                │
+                ▼
+           Grok / OpenAI / other upstreams
+~~~
+
+### 5.1 技术栈
+
+前端：
+
+- Tauri 2、React、TypeScript、Vite；
+- React Router；
+- Zustand；
+- TanStack Query；
+- TanStack Virtual；
+- Tailwind CSS + shadcn/ui 风格组件；
+- Markdown 渲染；
+- Zod 运行时校验。
+
+Rust：
+
+- Tokio；
+- reqwest；
+- serde/serde_json；
+- sqlx 或 rusqlite；
+- keyring 或 Tauri 安全存储插件；
+- tracing；
+- uuid、chrono、thiserror、anyhow；
+- FFmpeg Sidecar。
+
+本地：
+
+- SQLite：结构化数据；
+- 应用数据目录：媒体和缩略图；
+- 系统密钥链：API Key；
+- 禁止用 localStorage 保存 API Key。
+
+### 5.2 目录结构
+
+~~~text
+Lingjing/
+├─ docs/LINGJING_CLIENT_SDD.md
+├─ src/
+│  ├─ app/
+│  ├─ layouts/
+│  ├─ pages/
+│  │  ├─ ChatPage.tsx
+│  │  ├─ ImagePage.tsx
+│  │  ├─ VideoPage.tsx
+│  │  ├─ AudioPage.tsx
+│  │  ├─ AssetsPage.tsx
+│  │  ├─ HistoryPage.tsx
+│  │  └─ SettingsPage.tsx
+│  ├─ features/
+│  │  ├─ chat/
+│  │  ├─ image/
+│  │  ├─ video/
+│  │  ├─ audio/
+│  │  ├─ assets/
+│  │  ├─ history/
+│  │  └─ gateways/
+│  ├─ components/
+│  ├─ services/
+│  ├─ stores/
+│  ├─ types/
+│  ├─ lib/
+│  └─ i18n/
+├─ src-tauri/
+│  ├─ src/
+│  │  ├─ commands/
+│  │  ├─ domain/
+│  │  ├─ gateways/
+│  │  ├─ jobs/
+│  │  ├─ assets/
+│  │  ├─ persistence/
+│  │  ├─ secrets/
+│  │  ├─ media/
+│  │  ├─ errors.rs
+│  │  └─ state.rs
+│  ├─ capabilities/
+│  ├─ migrations/
+│  └─ tauri.conf.json
+└─ scripts/
+~~~
+
+页面只组合组件，不直接实现 HTTP、SQL、Key、文件和 FFmpeg。
+
+---
+
+## 6. 网关和模型设计
+
+### 6.1 网关配置
+
+~~~ts
+type GatewayProfile = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  protocol: "openai-compatible" | "newapi" | "sub2api" | "grok2api" | "custom";
+  apiKeyRef: string;
+  enabled: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+~~~
+
+支持：
+
+- 新增、编辑、删除多个网关；
+- 设置默认网关；
+- 输入、替换、清空 Key；
+- 测试连接；
+- 刷新模型；
+- 启用/禁用网关。
+
+实际 Key 只存系统安全存储，SQLite 只保存 apiKeyRef。
+
+### 6.2 适配器接口
+
+~~~rust
+#[async_trait]
+pub trait GatewayAdapter: Send + Sync {
+    async fn test_connection(&self, ctx: &RequestContext) -> Result<ConnectionTest>;
+    async fn list_models(&self, ctx: &RequestContext) -> Result<Vec<RemoteModel>>;
+    async fn resolve_capabilities(&self, model: &RemoteModel) -> Result<ModelCapabilities>;
+    async fn chat_stream(&self, req: ChatRequest) -> Result<ChatStream>;
+    async fn create_image_job(&self, req: ImageRequest) -> Result<RemoteJob>;
+    async fn create_video_job(&self, req: VideoRequest) -> Result<RemoteJob>;
+    async fn get_job_status(&self, req: JobStatusRequest) -> Result<RemoteJobStatus>;
+    async fn cancel_job(&self, req: CancelJobRequest) -> Result<CancelResult>;
+    async fn synthesize_speech(&self, req: TtsRequest) -> Result<RemoteAudioResult>;
+    async fn transcribe_audio(&self, req: SttRequest) -> Result<RemoteTranscript>;
+}
+~~~
+
+注册表根据 protocol 选择：
+
+~~~text
+openai-compatible -> OpenAICompatibleAdapter
+newapi            -> NewApiAdapter
+sub2api           -> Sub2ApiAdapter
+grok2api          -> Grok2ApiAdapter
+custom            -> CustomAdapter
+~~~
+
+### 6.3 默认路径
+
+~~~text
+GET  {baseUrl}/models
+POST {baseUrl}/chat/completions
+POST {baseUrl}/images/generations
+POST {baseUrl}/images/edits
+POST {baseUrl}/audio/speech
+POST {baseUrl}/audio/transcriptions
+~~~
+
+视频生成、编辑、延长通过适配器决定路径、方法、multipart 字段、任务 ID、状态、结果 URL 和错误字段。不得假定所有网关一致。
+
+### 6.4 模型能力解析
+
+优先级：
+
+1. 网关显式能力；
+2. 客户端内置映射；
+3. 模型名兼容推断；
+4. 无法确认时使用最小能力并隐藏不确定参数。
+
+~~~ts
+type ModelCapabilities = {
+  chat?: {
+    streaming: boolean;
+    markdown: boolean;
+  };
+  image?: {
+    count?: { min: number; max: number; default: number };
+    aspectRatios: string[];
+    resolutions: string[];
+    qualities: string[];
+    supportsEdit: boolean;
+  };
+  video?: {
+    operations: Array<"generate" | "edit" | "extend">;
+    inputModes: Array<"text-to-video" | "image-to-vid
+eo" | "reference-to-video">;
+    durations?: number[];
+    aspectRatios: string[];
+    resolutions: string[];
+    maxReferenceImages?: number;
+    maxReferenceVoices?: number;
+  };
+  tts?: {
+    voices: string[];
+    formats: string[];
+    streaming: boolean;
+  };
+  stt?: {
+    languages: string[];
+    formats: string[];
+    timestamps: boolean;
+    realtime: boolean;
+  };
+};
+~~~
+
+模型切换后重新加载能力，保留有效参数，无效参数替换默认值并提示。
+
+---
+
+## 7. 功能需求
+
+### 7.1 聊天
+
+首版：
+
+- 文本输入、模型选择；
+- SSE/兼容流式输出；
+- 停止生成；
+- 重新生成；
+- Markdown；
+- 复制消息；
+- 新建、切换、删除会话；
+- 本地会话历史。
+
+不做文件问答、图片理解、联网搜索、Agent、MCP、多人会话。
+
+流式链路：
+
+~~~text
+Gateway SSE/stream
+  ↓
+Rust ChatStream
+  ↓ 30~50ms 聚合
+Tauri chat://delta
+  ↓
+React 批量更新消息
+~~~
+
+### 7.2 图片
+
+参数：
+
+- 网关；
+- 模型；
+- 提示词；
+- 生成数量；
+- 比例；
+- 分辨率 1K/2K；
+- 质量；
+- 模型支持时的参考图/编辑图。
+
+~~~ts
+type ImageRequest = {
+  gatewayProfileId: string;
+  modelId: string;
+  prompt: string;
+  count: number;
+  aspectRatio?: string;
+  resolution?: "1k" | "2k" | string;
+  quality?: string;
+  referenceAssetIds?: string[];
+};
+~~~
+
+模型不支持批量时由 JobManager 拆分子任务，UI 仍以一个父任务呈现。
+
+### 7.3 视频
+
+操作模式：
+
+~~~ts
+type VideoOperation = "generate" | "edit" | "extend";
+~~~
+
+生成：
+
+- 文本提示词；
+- 模型；
+- 文生视频；
+- 首帧图；
+- 参考图；
+- 参考音色；
+- 生成时长；
+- 比例；
+- 分辨率。
+
+编辑：
+
+- 源视频；
+- 编辑提示词；
+- 模型；
+- 能力允许的附加输入；
+- 不显示不支持的时长、比例、分辨率。
+
+延长：
+
+- 源视频；
+- 延长提示词；
+- 模型；
+- 延长时长；
+- 其他属性继承源视频或由能力决定。
+
+校验：
+
+- 首帧图与参考图互斥；
+- 编辑/延长必须有源视频；
+- 参考图和参考音色遵守模型上限；
+- 前端和 Rust 各校验一次；
+- 每种操作记录完整参数快照。
+
+~~~ts
+type VideoRequest = {
+  gatewayProfileId: string;
+  modelId: string;
+  operation: "generate" | "edit" | "extend";
+  inputMode?: "text-to-video" | "image-to-video" | "reference-to-video";
+  prompt: string;
+  firstFrameAssetId?: string;
+  referenceImageAssetIds?: string[];
+  referenceVoiceIds?: string[];
+  sourceVideoAssetId?: string;
+  durationSec?: number;
+  extensionDurationSec?: number;
+  aspectRatio?: string;
+  resolution?: string;
+};
+~~~
+
+所有远程异步任务映射为本地 GenerationJob，支持轮询或事件流。视频默认仅封面，点击才播放。
+
+### 7.4 TTS / STT
+
+TTS 页面包含：
+
+~~~text
+语音合成 | 语音识别
+~~~
+
+TTS 参数：
+
+- 模型；
+- 声音；
+- 文本；
+- 语速；
+- 语气/指令（模型支持时）；
+- 输出格式；
+- 试听、保存、下载。
+
+STT 首版：
+
+- 上传音频或视频文件；
+- 选择模型和语言；
+- 输出文本、JSON、SRT、VTT；
+- 保存到历史和素材库。
+
+不做麦克风录音、实时 STT、实时语音对话。
+
+### 7.5 素材库
+
+首版：
+
+- 图片、视频、音频统一网格；
+- 预览、播放、下载、删除；
+- 显示文件大小、类型、时间、来源任务；
+- 打开本地文件。
+
+后续：搜索、分类、收藏、批量删除、导出、批量移动。
+
+### 7.6 历史记录
+
+记录：
+
+- 聊天会话和消息；
+- 图片、视频、TTS、STT 任务；
+- 成功、失败、取消、停止；
+- 网关、模型和完整参数快照。
+
+首版提供类型筛选和详情；复杂搜索及批量操作后置。
+
+---
+
+## 8. 数据模型
+
+### 8.1 GatewayProfile
+
+~~~sql
+id TEXT PRIMARY KEY
+name TEXT NOT NULL
+base_url TEXT NOT NULL
+protocol TEXT NOT NULL
+api_key_ref TEXT NOT NULL
+enabled INTEGER NOT NULL DEFAULT 1
+is_default INTEGER NOT NULL DEFAULT 0
+created_at TEXT NOT NULL
+updated_at TEXT NOT NULL
+~~~
+
+### 8.2 ModelSnapshot
+
+~~~sql
+id TEXT PRIMARY KEY
+gateway_profile_id TEXT NOT NULL
+model_id TEXT NOT NULL
+display_name TEXT
+capabilities_json TEXT NOT NULL
+raw_json TEXT
+last_synced_at TEXT NOT NULL
+~~~
+
+### 8.3 GenerationJob
+
+~~~sql
+id TEXT PRIMARY KEY
+gateway_profile_id TEXT NOT NULL
+kind TEXT NOT NULL
+operation TEXT
+model_id TEXT
+status TEXT NOT NULL
+progress REAL NOT NULL DEFAULT 0
+remote_job_id TEXT
+request_json TEXT NOT NULL
+response_json TEXT
+error_code TEXT
+error_message TEXT
+created_at TEXT NOT NULL
+started_at TEXT
+finished_at TEXT
+~~~
+
+kind：chat/image/video/tts/stt。status：queued/running/succeeded/failed/canceled/stopped。
+
+### 8.4 Asset
+
+~~~sql
+id TEXT PRIMARY KEY
+job_id TEXT
+kind TEXT NOT NULL
+mime_type TEXT NOT NULL
+local_path TEXT NOT NULL
+thumbnail_path TEXT
+size_bytes INTEGER NOT NULL
+duration_ms INTEGER
+width INTEGER
+height INTEGER
+metadata_json TEXT
+favorite INTEGER NOT NULL DEFAULT 0
+created_at TEXT NOT NULL
+~~~
+
+### 8.5 ChatSession / ChatMessage
+
+~~~sql
+chat_sessions(
+  id, title, model_id, gateway_profile_id, created_at, updated_at
+)
+
+chat_messages(
+  id, session_id, role, content, status, token_usage_json, created_at
+)
+~~~
+
+### 8.6 Settings
+
+~~~sql
+settings(key TEXT PRIMARY KEY, value_json TEXT NOT NULL)
+~~~
+
+主题、语言、最近选择、缓存目录和 UI 偏好放这里。敏感信息不放这里。
+
+---
+
+## 9. 本地文件和缓存
+
+推荐目录：
+
+~~~text
+<app-data>/
+├─ db/lingjing.sqlite
+├─ assets/originals/{assetId}/...
+├─ assets/thumbnails/{assetId}.jpg
+├─ cache/downloads/...
+├─ cache/temp/...
+└─ logs/lingjing.log
+~~~
+
+策略：
+
+- 下载先写临时文件，完成后原子重命名；
+- 文件名使用 Asset ID；
+- 数据库记录路径和大小；
+- 删除失败时保留待清理记录；
+- 不设自动容量上限；
+- 设置页显示资产、缓存和日志占用；
+- 未来增加自定义目录和手动清理。
+
+---
+
+## 10. 任务状态机
+
+~~~text
+queued
+  └─> running
+        ├─> succeeded
+        ├─> failed
+        ├─> canceled
+        └─> stopped
+~~~
+
+状态：
+
+- queued：已写库，等待 worker；
+- running：已请求网关或正在下载/处理；
+- succeeded：结果和本地资产已落盘；
+- failed：不可恢复或重试耗尽；
+- canceled：用户主动取消；
+- stopped：客户端退出、流停止或未完成即结束。
+
+重试：
+
+- 网络超时、5xx、限流可重试；
+- 认证失败、参数错误、模型不存在不自动重试；
+- 手动重试新建 Job ID，保留原 Job。
+
+退出流程：
+
+1. 禁止新任务；
+2. 取消本地请求、轮询和 FFmpeg；
+3. 尝试取消远程任务；
+4. 未完成任务标记 stopped；
+5. flush SQLite；
+6. 退出。
+
+---
+
+## 11. Tauri Commands 与 Events
+
+Commands：
+
+~~~text
+gateway_list_profiles()
+gateway_create_profile(input)
+gateway_update_profile(input)
+gateway_delete_profile(id)
+gateway_set_default(id)
+gateway_set_api_key(profile_id, secret)
+gateway_test_connection(profile_id)
+gateway_refresh_models(profile_id)
+
+chat_send(input)
+chat_stop(job_id)
+
+image_create_job(input)
+video_create_job(input)
+audio_tts(input)
+audio_stt(input)
+
+job_get(id)
+job_cancel(id)
+job_retry(id)
+job_list(filter)
+
+asset_list(filter)
+asset_get(id)
+asset_delete(id)
+asset_open_location(id)
+storage_usage()
+settings_get()
+settings_update(input)
+~~~
+
+Events：
+
+~~~text
+job://created
+job://status
+job://progress
+job://asset-ready
+job://failed
+chat://delta
+chat://completed
+chat://error
+gateway://models-updated
+app://shutdown
+~~~
+
+事件 payload 包含 jobId、timestamp、correlationId。进度事件必须节流。
+
+---
+
+## 12. UI/UX 规范
+
+### 12.1 AppShell
+
+~~~text
+┌────────────┬──────────────────────────────────────┐
+│ Logo       │ 页面标题 / 当前网关 / 状态提示       │
+│ 聊天       ├──────────────────────────────────────┤
+│ 图片       │                                      │
+│ 视频       │ 主内容区                             │
+│ TTS        │                                      │
+│ 素材库     │                                      │
+│ 历史记录   │                                      │
+│            │                                      │
+│ 设置       │                                      │
+└────────────┴──────────────────────────────────────┘
+~~~
+
+### 12.2 主题
+
+- dark：默认；
+- light；
+- system：监听系统变化；
+- 使用设计令牌；
+- 媒体预览、代码块、表格在两种主题可读。
+
+### 12.3 表单
+
+- 参数按能力动态显示；
+- 模型切换保留有效值；
+- 自动修正显示非阻塞提示；
+- 提交按钮只影响当前任务；
+- 失败信息提供重试或修改参数入口。
+
+### 12.4 媒体
+
+- 图片：缩略图、原图、下载；
+- 视频：封面、点击播放、下载；
+- 音频：播放器、下载；
+- 组件接收文件引用或受控 URL，不接收大 Base64。
+
+---
+
+## 13. 安全设计
+
+1. API Key 只进入 Rust 命令，React 不持久化明文。
+2. SQLite 只保存 apiKeyRef。
+3. 日志脱敏 Authorization、Key、Cookie 和完整请求体。
+4. Tauri Capabilities 最小授权。
+5. 默认只允许 HTTPS；开发模式才允许明确配置的 HTTP。
+6. 下载内容只保存，不执行。
+7. FFmpeg 使用受控参数，不拼接未经转义的 shell。
+8. 外部 URL 使用系统默认浏览器。
+9. 源码、文档、测试、CI 不含真实 Key。
+10. 用户此前提供过一个真实 Key；正式开发和联调前应旋转/替换，Key 只通过运行时输入。
+
+---
+
+## 14. 错误处理
+
+统一错误：
+
+~~~ts
+type AppError = {
+  code: string;
+  message: string;
+  userMessage: string;
+  retryable: boolean;
+  details?: unknown;
+  correlationId: string;
+};
+~~~
+
+错误代码：
+
+~~~text
+NETWORK_TIMEOUT
+NETWORK_OFFLINE
+AUTH_INVALID
+GATEWAY_
+NOT_FOUND
+MODEL_NOT_FOUND
+CAPABILITY_UNSUPPORTED
+VALIDATION_FAILED
+RATE_LIMITED
+REMOTE_JOB_FAILED
+DOWNLOAD_FAILED
+MEDIA_PROCESSING_FAILED
+STORAGE_FAILED
+CANCELED
+~~~
+
+页面内显示错误、原因、重试和修改配置入口，不使用无法关闭的阻塞弹窗。
+
+---
+
+## 15. 性能与并发
+
+### 15.1 Worker
+
+~~~text
+Tokio Runtime
+├─ Network Worker：HTTP、SSE、轮询、上传下载
+├─ Media Worker：缩略图、元数据、FFmpeg
+├─ Persistence Worker：SQLite 批量写入
+└─ Event Dispatcher：节流事件
+~~~
+
+前端不直接调用 reqwest、文件系统或 FFmpeg。
+
+### 15.2 默认并发
+
+~~~text
+视频远程任务：2
+图片任务：4
+TTS/STT：4
+下载任务：3
+缩略图：CPU 核心数限制
+~~~
+
+### 15.3 虚拟化与懒加载
+
+- 图片网格和历史列表必须虚拟化；
+- 只解码可见项和预取范围；
+- 首屏缩略图，点击才加载原图；
+- 视频只加载封面和元数据；
+- 聊天增量文本 30~50ms 批量提交。
+
+### 15.4 启动
+
+1. 先显示静态 UI；
+2. 异步打开 SQLite；
+3. 加载最近页面和任务摘要；
+4. 后台刷新模型；
+5. 进入页面时再加载详细媒体和能力。
+
+---
+
+## 16. 测试策略
+
+### 16.1 Mock Gateway
+
+建立本地 Mock Gateway，覆盖：
+
+- OpenAI 兼容聊天流；
+- 图片单图/多图/失败；
+- 视频异步任务、进度、完成、失败、取消；
+- TTS 二进制响应；
+- STT multipart 响应；
+- 认证失败、限流、超时、错误 JSON；
+- 多网关路径和字段映射。
+
+真实网关只做手动联调，Key 不进入仓库或 CI。
+
+### 16.2 测试层级
+
+单元测试：
+
+- 能力解析；
+- 参数校验；
+- 状态机；
+- 重试决策；
+- 缓存路径；
+- 日志脱敏；
+- Repository。
+
+集成测试：
+
+- Adapter + Mock Gateway；
+- SSE 流式聊天；
+- 视频轮询和取消；
+- 下载、缩略图和 SQLite 事务；
+- 退出清理。
+
+UI 测试：
+
+- 六个导航；
+- 三种主题；
+- 模型能力表单；
+- 任务提交、进度、失败和重试；
+- 虚拟化滚动；
+- 素材预览和打开位置。
+
+性能测试：
+
+- 冷启动；
+- 5000 条历史记录滚动；
+- 1000 个素材缩略图；
+- 4 图片 + 2 视频并发；
+- 大视频处理期间 UI 响应；
+- 长时间内存趋势。
+
+建议检查：
+
+~~~text
+npm run lint
+npm run typecheck
+npm run test
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+npm run tauri build
+~~~
+
+---
+
+## 17. 开发里程碑
+
+### M0 工程骨架
+
+Tauri、React/TS/Vite、AppShell、六项导航、设置、主题、SQLite、密钥链、Mock Gateway、日志和错误基础设施。
+
+出口：可启动、切换页面、切换主题，主界面达到 2 秒显示目标。
+
+### M1 网关与聊天
+
+多网关、Key 安全保存、连接测试、模型列表、能力快照、文本聊天、SSE、停止、重新生成、会话历史。
+
+### M2 视频 P0
+
+生成/编辑/延长、首帧图、参考图、参考音色、动态表单、任务轮询、取消、重试、下载、封面和预览。
+
+### M3 图片 P1
+
+多模型、数量、比例、1K/2K、质量、多结果资产、虚拟化画廊和历史。
+
+### M4 TTS/STT
+
+TTS Tab、文件 STT Tab、播放、下载、文本/字幕导出；不含麦克风和实时 STT。
+
+### M5 素材库和历史完善
+
+统一资产列表、基础筛选、详情、空间占用；搜索、分类、收藏、批量删除和导出后置。
+
+### M6 发布质量
+
+Windows 安装包、更新方案评估、日志和崩溃处理、安全审计、性能回归、多平台构建。
+
+---
+
+## 18. 验收标准
+
+### 全局
+
+- [ ] Windows 冷启动 2 秒内显示主界面骨架；
+- [ ] 六个导航项顺序正确；
+- [ ] 深色、浅色、跟随系统可用；
+- [ ] 退出后本地任务停止且不驻留；
+- [ ] API Key 不出现在日志、SQLite 普通字段、前端持久化或构建产物；
+- [ ] 上传、下载、转码期间 UI 仍可交互；
+- [ ] 单文件职责清晰，无超大业务文件。
+
+### 网关
+
+- [ ] 可新增、编辑、删除多个网关；
+- [ ] 可设置默认网关；
+- [ ] 可安全保存和替换 Key；
+- [ ] 可测试连接和刷新模型；
+- [ ] NewAPI、Sub2API、grok2api 通过适配层工作；
+- [ ] 模型切换后按能力显示参数。
+
+### 聊天
+
+- [ ] 文本可发送；
+- [ ] 流式输出可见；
+- [ ] 可停止和重新生成；
+- [ ] 会话与消息重启后仍存在。
+
+### 图片
+
+- [ ] 模型可切换；
+- [ ] 数量、比例、1K/2K、质量可选；
+- [ ] 多结果全部进入素材库和历史；
+- [ ] 画廊虚拟化有效。
+
+### 视频
+
+- [ ] 生成/编辑/延长可切换；
+- [ ] 首帧图与参考图互斥；
+- [ ] 能力支持时可用参考音色；
+- [ ] 时长、比例、分辨率可设置；
+- [ ] 支持进度、取消、重试和预览；
+- [ ] 默认不自动播放。
+
+### TTS/STT
+
+- [ ] 两个 Tab；
+- [ ] TTS 可合成、播放和保存；
+- [ ] STT 可上传音频/视频并获得文本；
+- [ ] 首版无麦克风录音入口。
+
+### 素材与历史
+
+- [ ] 图片、视频、音频统一查看；
+- [ ] 参数可追溯；
+- [ ] 可预览、下载、删除和打开文件位置；
+- [ ] 显示本地空间占用。
+
+---
+
+## 19. 风险与应对
+
+| 风险 | 影响 | 应对 |
+|---|---|---|
+| 网关视频接口不统一 | 高 | 适配器、字段映射、能力注册表、Mock Gateway |
+| 上游模型名变化 | 中 | 模型快照、映射和手动刷新 |
+| 远程任务无法取消 | 中 | 本地停止轮询，标记 stopped，提示网关行为 |
+| 大视频占用磁盘 | 高 | 显示空间，后续手动清理和容量策略 |
+| WebView 媒体过多卡顿 | 高 | 缩略图、虚拟化、懒加载、单视频播放 |
+| API Key 泄露 | 高 | 系统密钥链、日志脱敏、开发前轮换 |
+| 跨平台媒体差异 | 中 | FFmpeg 统一预览和缩略图 |
+| 单文件膨胀 | 中 | 分层、接口隔离、300 行软上限、评审门禁 |
+
+---
+
+## 20. 编码和协作规范
+
+### 20.1 分层
+
+~~~text
+页面层：路由、布局、组合组件
+Feature 层：业务表单、状态和交互
+Service 层：前端调用封装
+Tauri Command：输入校验和领域服务编排
+Domain：纯业务模型和状态机
+Gateway Adapter：协议差异
+Repository：SQLite 和文件系统
+Worker：异步任务和媒体处理
+~~~
+
+禁止页面直接写 SQL、拼 Authorization、调用 FFmpeg；禁止 Adapter 操作 UI 状态；禁止 Repository 解析上游 API；禁止单文件跨越多个领域。
+
+### 20.2 命名
+
+- TypeScript：组件 PascalCase、变量 camelCase；
+- Rust：模块/函数 snake_case、类型 PascalCase；
+- 数据库字段 snake_case；
+- 厂商字段只在 Adapter 层出现；
+- 异步操作必须返回 Job ID 或 Correlation ID。
+
+### 20.3 提交评审
+
+每个功能提交应包含：
+
+1. 对应需求/验收条目；
+2. 领域模型和接口变更；
+3. 单元或集成测试；
+4. UI 变更截图或录屏；
+5. 密钥、日志和权限检查；
+6. 不提交真实 Key、Cookie 或生成资产。
+
+---
+
+## 21. ADR 摘要
+
+### ADR-001：Tauri 2 + React/TypeScript + Rust
+
+Windows 优先且需要多平台；Rust 负责本地任务和媒体，React 负责多页面 UI。
+
+### ADR-002：不开发独立后端
+
+用户已有 NewAPI、Sub2API、grok2api，客户端只需连接、适配、保存本地状态和处理媒体。
+
+### ADR-003：本地优先
+
+配置、任务、历史和素材全部保存在本机，减少服务依赖。
+
+### ADR-004：能力驱动表单
+
+不同网关和模型对图片、视频、音频字段支持不同，页面不能写死参数集合。
+
+### ADR-005：退出即停止
+
+退出客户端就是彻底结束，不做后台驻留和下次恢复。
+
+### ADR-006：传统菜单工作台
+
+先交付稳定的聊天、图片、视频、TTS、素材和历史闭环，不引入画布、Agent、MCP 或插件平台复杂度。
+
+---
+
+## 22. 不阻塞编码的待实现事项
+
+- NewAPI/Sub2API/grok2api 的具体视频路径和字段差异；
+- 各网关的真实能力字段完整度；
+- 自动更新供应商和签名策略；
+- macOS/Linux FFmpeg 打包细节；
+- 高级素材搜索、收藏和批量操作；
+- 实时 STT 和麦克风录音。
+
+真实网关联调必须使用运行时输入的测试 Key。用户此前提供的 Key 不得写入源码、文档、测试数据或日志；正式开发和联调前应轮换。
+
+---
+
+## 23. 结论
+
+Lingjing 首版是一个纯本地、跨平台、Windows 优先的 AI 创作客户端：
+
+~~~text
+Tauri 2 + React/TypeScript + Rust
+        ↓
+多个用户配置的 NewAPI / Sub2API / grok2api
+        ↓
+Grok / OpenAI / 其他上游模型
+~~~
+
+开发顺序以视频 P0、图片 P1 为核心，聊天提供基础文本体验，TTS 页面承载 TTS/STT，素材库和历史记录承担统一本地资产追踪。所有网络和媒体重任务在 Rust 异步 worker 中运行，所有页面通过低耦合的命令和领域接口协作，确保启动快、界面不卡顿、后续编码可维护。
+

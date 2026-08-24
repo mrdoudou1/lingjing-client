@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b0c10"/><stop offset="1" stop-color="#171922"/></linearGradient>
+  <linearGradient id="hero" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2b405c"/><stop offset=".55" stop-color="#1a2231"/><stop offset="1" stop-color="#0c111b"/></linearGradient>
+  <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#72b6ff"/><stop offset="1" stop-color="#9b8cff"/></linearGradient>
+  <filter id="shadow"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity=".35"/></filter>
+  <filter id="blur"><feGaussianBlur stdDeviation="18"/></filter>
+</defs>
+<rect width="1440" height="1024" fill="url(#bg)"/>
+<circle cx="1270" cy="90" r="170" fill="#426b9f" opacity=".22" filter="url(#blur)"/>
+<circle cx="780" cy="950" r="220" fill="#6d4e9a" opacity=".14" filter="url(#blur)"/>
+<g font-family="Segoe UI, Arial, sans-serif" fill="#f5f7fb">
+  <rect x="22" y="22" width="210" height="980" rx="28" fill="#11141d" fill-opacity=".78" stroke="#ffffff" stroke-opacity=".08"/>
+  <text x="52" y="72" font-size="22" font-weight="700">Lingjing</text>
+  <text x="52" y="96" font-size="11" fill="#9aa5b5">AI 创作客户端</text>
+  <rect x="42" y="132" width="170" height="46" rx="15" fill="#ffffff" fill-opacity=".12"/>
+  <circle cx="67" cy="155" r="8" fill="#72b6ff"/><text x="87" y="161" font-size="15" font-weight="600">聊天</text>
+  <text x="52" y="214" font-size="15" fill="#98a3b3">图片</text>
+  <rect x="42" y="234" width="170" height="46" rx="15" fill="url(#accent)"/>
+  <circle cx="67" cy="257" r="8" fill="#fff"/><text x="87" y="263" font-size="15" font-weight="700">视频</text>
+  <text x="52" y="316" font-size="15" fill="#98a3b3">TTS</text>
+  <text x="52" y="366" font-size="15" fill="#98a3b3">素材库</text>
+  <text x="52" y="416" font-size="15" fill="#98a3b3">历史记录</text>
+  <line x1="48" y1="886" x2="204" y2="886" stroke="#fff" stroke-opacity=".08"/>
+  <text x="52" y="930" font-size="14" fill="#c7ced9">设置</text>
+  <text x="52" y="960" font-size="11" fill="#707b8c">NewAPI · 已连接</text>
+
+  <text x="278" y="74" font-size="28" font-weight="700">视频创作</text>
+  <text x="278" y="104" font-size="13" fill="#8e99aa">把想法变成连续的画面</text>
+  <rect x="1132" y="48" width="238" height="42" rx="15" fill="#ffffff" fill-opacity=".08" stroke="#fff" stroke-opacity=".08"/>
+  <circle cx="1158" cy="69" r="6" fill="#51d88a"/><text x="1174" y="75" font-size="13">NewAPI 主网关</text>
+  <path d="M1347 66 l7 7 l7-7" fill="none" stroke="#aab4c3" stroke-width="2"/>
+
+  <rect x="278" y="146" width="824" height="506" rx="28" fill="url(#hero)" filter="url(#shadow)"/>
+  <rect x="302" y="170" width="776" height="432" rx="21" fill="#0b1018" stroke="#fff" stroke-opacity=".08"/>
+  <path d="M330 493 C460 398, 565 451, 675 348 S893 259, 1050 349 L1050 576 L330 576 Z" fill="#23344b" opacity=".82"/>
+  <circle cx="840" cy="287" r="92" fill="#9a7aff" opacity=".28" filter="url(#blur)"/>
+  <path d="M466 536 C558 482, 640 486, 714 531 C786 576, 876 579, 1036 480" fill="none" stroke="#82b8f7" stroke-width="5" opacity=".7"/>
+  <rect x="330" y="520" width="168" height="38" rx="12" fill="#000" fill-opacity=".32"/><text x="348" y="545" font-size="12" fill="#d7deeb">预览 · 00:08 / 00:12</text>
+  <circle cx="690" cy="386" r="34" fill="#fff" fill-opacity=".9"/><path d="M683 368 L683 404 L710 386 Z" fill="#151922"/>
+  <rect x="302" y="618" width="776" height="12" rx="6" fill="#fff" fill-opacity=".1"/><rect x="302" y="618" width="512" height="12" rx="6" fill="url(#accent)"/>
+  <circle cx="814" cy="624" r="8" fill="#fff"/>
+
+  <rect x="278" y="684" width="824" height="292" rx="28" fill="#151923" fill-opacity=".86" stroke="#fff" stroke-opacity=".08"/>
+  <text x="306" y="724" font-size="14" fill="#a8b3c3">提示词</text>
+  <text x="306" y="759" font-size="17" fill="#f5f7fb">夜色中的海边木屋，镜头缓慢推进，窗内灯光温暖</text>
+  <text x="306" y="791" font-size="12" fill="#7e899a">生成模式 · 文生视频</text>
+  <rect x="306" y="832" width="95" height="34" rx="12" fill="#ffffff" fill-opacity=".08"/><text x="329" y="854" font-size="12">12 秒</text>
+  <rect x="413" y="832" width="95" height="34" rx="12" fill="#ffffff" fill-opacity=".08"/><text x="436" y="854" font-size="12">16:9</text>
+  <rect x="520" y="832" width="95" height="34" rx="12" fill="#ffffff" fill-opacity=".08"/><text x="543" y="854" font-size="12">720p</text>
+  <rect x="850" y="823" width="220" height="52" rx="17" fill="url(#accent)"/><text x="920" y="855" font-size="15" font-weight="700">生成视频</text>
+  <text x="306" y="924" font-size="12" fill="#758092">模型 · grok-imagine-video · 预计排队 18 秒</text>
+
+  <rect x="1132" y="146" width="238" height="830" rx="28" fill="#12151d" fill-opacity=".82" stroke="#fff" stroke-opacity=".08"/>
+  <text x="1160" y="188" font-size="14" font-weight="600">创作设置</text>
+  <text x="1160" y="228" font-size="12" fill="#8d98a9">操作模式</text>
+  <rect x="1158" y="242" width="186" height="38" rx="12" fill="#ffffff" fill-opacity=".1"/><text x="1178" y="267" font-size="13">生成</text><text x="1310" y="267" font-size="12" fill="#76b7ff">⌄</text>
+  <text x="1160" y="320" font-size="12" fill="#8d98a9">模型</text>
+  <rect x="1158" y="334" width="186" height="38" rx="12" fill="#ffffff" fill-opacity=".1"/><text x="1178" y="359" font-size="12">grok-imagine-video</text>
+  <text x="1160" y="414" font-size="12" fill="#8d98a9">参考素材</text>
+  <rect x="1158" y="430" width="82" height="68" rx="12" fill="#27374b"/><text x="1171" y="468" font-size="11" fill="#dfe8f5">首帧图</text>
+  <rect x="1250" y="430" width="94" height="68" rx="12" fill="#1e2531" stroke="#72b6ff" stroke-dasharray="5 5"/><text x="1263" y="468" font-size="11" fill="#a9b5c5">＋ 参考图</text>
+  <text x="1160" y="548" font-size="12" fill="#8d98a9">参考音色</text>
+  <rect x="1158" y="562" width="186" height="38" rx="12" fill="#ffffff" fill-opacity=".1"/><text x="1178" y="587" font-size="12">默认音色</text>
+  <text x="1160" y="648" font-size="12" fill="#
+8d98a9">生成队列</text>
+  <circle cx="1171" cy="678" r="6" fill="#72b6ff"/><text x="1187" y="683" font-size="12">正在生成 · 72%</text>
+  <rect x="1158" y="698" width="186" height="6" rx="3" fill="#fff" fill-opacity=".1"/><rect x="1158" y="698" width="134" height="6" rx="3" fill="#72b6ff"/>
+  <text x="1160" y="748" font-size="11" fill="#697586">后台任务保持运行</text>
+  <text x="1160" y="918" font-size="11" fill="#697586">⌘ K 快速切换模块</text>
+</g></svg>

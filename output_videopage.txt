@@ -1,0 +1,178 @@
+import { useState, useEffect, useRef } from 'react';
+import { useStore } from '../stores/videoStore';
+import { VideoControls } from '../components/VideoControls';
+
+interface VideoPageProps {
+  notify: (message: string) => void;
+}
+
+export function VideoPage({ notify }: VideoPageProps) {
+  const [operation, setOperation] = useState<'generate' | 'edit' | 'extend'>('generate');
+  const [prompt, setPrompt] = useState('');
+  const [firstFrameAssetId, setFirstFrameAssetId] = useState('');
+  const [referenceImageAssetIds, setReferenceImageAssetIds] = useState<string[]>([]);
+  const [referenceVoiceId, setReferenceVoiceId] = useState('');
+  const [durationSec, setDurationSec] = useState(6);
+  const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [model, setModel] = useState('grok-imagine-video');
+  const [status, setStatus] = useState<'idle' | 'generating' | 'success' | 'failed' | 'canceled'>('idle');
+  const [progress, setProgress] = useState(0);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const store = useStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCreateJob = async () => {
+    if (!prompt.trim()) {
+      notify('请输入视频描述');
+      return;
+    }
+    if (operation === 'edit' && !firstFrameAssetId) {
+      notify('编辑视频需要先选择源视频');
+      return;
+    }
+    if (operation === 'extend' && !firstFrameAssetId) {
+      notify('延长视频需要先选择源视频');
+      return;
+    }
+
+    const request = {
+      gatewayProfileId: 'default',
+      modelId: model,
+      operation,
+      prompt,
+      firstFrameAssetId: operation === 'generate' ? '' : firstFrameAssetId,
+      referenceImageAssetIds,
+      referenceVoiceIds: referenceVoiceId ? [referenceVoiceId] : [],
+      sourceVideoAssetId: firstFrameAssetId,
+      durationSec: operation === 'extend' ? durationSec : undefined,
+      aspectRatio,
+    };
+
+    try {
+      setStatus('generating');
+      setProgress(0);
+      const newJobId = await window.__TAURI_INVOKE__('video_create_job', { request });
+      setJobId(newJobId as string);
+
+      // 轮询状态
+      const pollInterval = setInterval(async () => {
+        const job = await window.__TAURI_INVOKE__('job_get', { id: newJobId as string });
+        if (job.status === 'succeeded') {
+          clearInterval(pollInterval);
+          setStatus('success');
+          setPreviewUrl(http://localhost:8000/assets//preview.mp4);
+          notify('视频生成成功');
+          store.addAsset({ id: newJobId, kind: 'video', local_path: ssets/, thumbnail_path: ssets//thumb.jpg, size_bytes: 1024 * 1024, duration_ms: durationSec * 1000 });
+        } else if (job.status === 'failed') {
+          clearInterval(pollInterval);
+          setStatus('failed');
+          notify('视频生成失败');
+        } else if (job.status === 'running') {
+          setProgress(job.progress || 0);
+        }
+      }, 2000);
+
+      notify('视频任务已创建');
+    } catch (error) {
+      setStatus('failed');
+      notify('任务创建失败');
+    }
+  };
+
+  return (
+    <div className="creative-page studio-page video-studio-page">
+      <div className="creative-header">
+        <div>
+          <span className="eyebrow">视频工作区</span>
+          <h1>视频</h1>
+        </div>
+      </div>
+
+      <div className="notice-bar">
+        <span>✧</span>
+        <span>从文字、首帧或参考图开始，生成一段完整视频。</span>
+        <button onClick={() => notify('视频能力说明已打开')}>查看说明 ↗</button>
+      </div>
+
+      <div className="video-studio-container">
+        {/* 操作切换 */}
+        <div className="operation-tabs">
+          {['生成', '编辑', '延长'].map(item => (
+            <button
+              key={item}
+              className={operation === item.toLowerCase() ? 'selected' : ''}
+              onClick={() => {
+                setOperation(item.toLowerCase() as any);
+                setStatus('idle');
+                setPreviewUrl('');
+              }}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+
+        {/* 提示词输入 */}
+        <div className="prompt-dock">
+          <textarea
+            className="unified-input"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="描述视频画面、动作、镜头和节奏..."
+            rows={3}
+          />
+        </div>
+
+        {/* 控制面板 */}
+        <div className="dock-controls">
+          <select value={model} onChange={(e) => setModel(e.target.value)}>
+            <option value="grok-imagine-video">grok-imagine-video</option>
+            <option value="veo-3">veo-3</option>
+            <option value="sora-2">sora-2</option>
+          </select>
+
+          <button onClick={() => notify('首帧图选择器已打开')}>▧ 首帧图</button>
+          <button onClick={() => notify('参考图选择器已打开')}>▧ 参考图</button>
+          <button onClick={() => notify('参考音色已切换')}>◖ 不使用参考音色</button>
+
+          <select value={durationSec} onChange={(e) => setDurationSec(parseInt(e.target.value))}>
+            <option value={6}>6 秒</option>
+            <option value={12}>12 秒</option>
+            <option value={18}>18 秒</option>
+          </select>
+
+          <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)}>
+            <option value="16:9">16:9</option>
+            <option value="9:16">9:16</option>
+            <option value="1:1">1:1</option>
+          </select>
+
+          <button
+            className="dock-submit"
+            onClick={handleCreateJob}
+            disabled={status === 'generating'}
+          >
+            {status === 'generating' ? '生成中...' : '↑ 生成'}
+          </button>
+        </div>
+
+        {/* 进度与预览 */}
+        {status === 'generating' && (
+          <div className="generation-progress">
+            <div className="progress-bar">
+              <div className="progress-fill" style={{ width: ${progress}% }} />
+            </div>
+            <div className="progress-text">{Math.round(progress)}% 生成中</div>
+          </div>
+        )}
+
+        {previewUrl && status === 'success' && (
+          <div className="video-preview">
+            <video controls src={previewUrl} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
