@@ -110,7 +110,13 @@ export class PersistentAssetRepository implements AssetRepository {
     if (!tauriBridge.available()) return this.assets.find(asset => asset.id === id)?.localPath
     return tauriBridge.invoke<string | null>('asset_export', { id }).then(path => path ?? undefined)
   }
-  async usage() { const assets = await this.list(); return assets.reduce((total, asset) => total + asset.sizeBytes, 0) }
+  async usage() {
+    await this.ensureLoaded()
+    if (tauriBridge.available()) {
+      try { return await tauriBridge.invoke<number>('storage_usage') } catch { /* browser fallback */ }
+    }
+    return this.assets.reduce((total, asset) => total + asset.sizeBytes, 0)
+  }
 }
 export const assetRepository = new PersistentAssetRepository()
 export function assetFromJob(job: GenerationJob, mimeType = 'video/mp4'): Asset {
