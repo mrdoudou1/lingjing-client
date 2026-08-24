@@ -1,4 +1,5 @@
 use std::sync::Mutex;
+use tauri::{Emitter, Manager};
 
 mod assets;
 mod commands;
@@ -55,6 +56,23 @@ pub fn run() {
             commands::settings_get,
             commands::settings_update,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Lingjing");
+        .build(tauri::generate_context!())
+        .expect("error while building Lingjing")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                let state = app_handle.state::<AppState>();
+                if let Ok(mut jobs) = state.jobs.lock() {
+                    let stopped = jobs.stop_all();
+                    if let Ok(database) = state.database.lock() {
+                        for job in stopped {
+                            let _ = database.save_snapshot("jobs", &job.id.to_string(), &job);
+                        }
+                    }
+                }
+                let _ = app_handle.emit(
+                    "app://shutdown",
+                    serde_json::json!({ "reason": "exit-requested" }),
+                );
+            }
+        });
 }

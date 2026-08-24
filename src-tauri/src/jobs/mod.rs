@@ -42,6 +42,20 @@ impl JobManager {
             .cloned()
             .collect()
     }
+    pub fn stop_all(&mut self) -> Vec<GenerationJob> {
+        self.jobs
+            .values_mut()
+            .filter_map(|job| {
+                let active = matches!(job.status, JobStatus::Queued | JobStatus::Running);
+                if active {
+                    job.status = JobStatus::Stopped;
+                    Some(job.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -80,5 +94,17 @@ mod tests {
         let retried = manager.retry(created.id).expect("job should exist");
         assert_ne!(created.id, retried.id);
         assert!(matches!(retried.status, JobStatus::Queued));
+    }
+
+    #[test]
+    fn stop_all_marks_only_active_jobs_stopped() {
+        let mut manager = JobManager::default();
+        let created = manager.insert(job());
+        let stopped = manager.stop_all();
+        assert_eq!(stopped.len(), 1);
+        assert!(matches!(
+            manager.get(created.id).unwrap().status,
+            JobStatus::Stopped
+        ));
     }
 }
