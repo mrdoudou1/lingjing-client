@@ -1,6 +1,7 @@
 import { assetRepository } from '../assets/assetRepository'
 import type { GatewayAdapter, VideoRequest } from '../gateway/types'
 import { MockJobManager, type JobProgress } from './jobManager'
+import { historyRepository } from './historyRepository'
 
 export class VideoJobService {
   private readonly manager = new MockJobManager()
@@ -18,6 +19,7 @@ export class VideoJobService {
     this.requests.set(job.id, request)
     try {
       const result = await this.manager.runVideoJob(job, onProgress, controller.signal)
+      await historyRepository.recordJob(job, result.status)
       if (result.status === 'succeeded') await assetRepository.save({ id: `asset_${job.id}`, jobId: job.id, kind: 'video', mimeType: 'video/mp4', localPath: `mock://assets/${job.id}.mp4`, thumbnailPath: `mock://assets/${job.id}.jpg`, sizeBytes: 1024 * 1024, createdAt: new Date().toISOString() })
       return result
     } finally { this.controllers.delete(job.id) }

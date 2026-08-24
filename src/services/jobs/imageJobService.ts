@@ -2,6 +2,7 @@ import type { ImageRequest } from '../../types/domain'
 import { assetRepository } from '../assets/assetRepository'
 import type { GatewayAdapter } from '../gateway/types'
 import type { JobProgress } from './jobManager'
+import { historyRepository } from './historyRepository'
 
 export class ImageJobService {
   private readonly adapter: GatewayAdapter
@@ -20,6 +21,7 @@ export class ImageJobService {
       onProgress({ status: completed === total ? 'succeeded' : 'running', progress: Math.round((completed / total) * 100) })
       await assetRepository.save({ id: `asset_${child.id}`, jobId: parent.id, kind: 'image', mimeType: 'image/png', localPath: `mock://assets/${child.id}.png`, thumbnailPath: `mock://assets/${child.id}.thumb.jpg`, sizeBytes: 256 * 1024, createdAt: new Date().toISOString() })
     }
+    await historyRepository.recordJob(parent, 'succeeded')
     return { ...parent, status: 'succeeded' as const, progress: 100 }
   }
 }

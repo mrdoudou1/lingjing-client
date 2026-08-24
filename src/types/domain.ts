@@ -89,6 +89,19 @@ export interface GenerationJob<TRequest = unknown> {
   createdAt: string
 }
 
+export interface HistoryRecord {
+  id: string
+  jobId: string
+  kind: 'chat' | 'image' | 'video' | 'tts' | 'stt'
+  status: JobStatus
+  modelId: string
+  gatewayProfileId: string
+  request: unknown
+  createdAt: string
+  finishedAt?: string
+  errorMessage?: string
+}
+
 export interface Asset {
   id: string
   jobId?: string
