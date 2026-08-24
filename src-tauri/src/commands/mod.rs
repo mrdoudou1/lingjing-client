@@ -5,6 +5,16 @@ use crate::{
 use tauri::State;
 use uuid::Uuid;
 
+fn persist_job(state: &AppState, job: &crate::domain::GenerationJob) -> Result<(), String> {
+    let database = state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?;
+    database
+        .save_snapshot("jobs", &job.id.to_string(), job)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub fn gateway_list_profiles(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
@@ -127,7 +137,10 @@ pub fn video_create_job(
     let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     let job = registry.create_video_job(&request);
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
-    Ok(jobs.insert(job))
+    let inserted = jobs.insert(job);
+    drop(jobs);
+    persist_job(state.inner(), &inserted)?;
+    Ok(inserted)
 }
 
 #[tauri::command]
@@ -144,7 +157,10 @@ pub fn image_create_job(
     let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     let job = registry.create_image_job(&request);
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
-    Ok(jobs.insert(job))
+    let inserted = jobs.insert(job);
+    drop(jobs);
+    persist_job(state.inner(), &inserted)?;
+    Ok(inserted)
 }
 
 #[tauri::command]
@@ -158,7 +174,10 @@ pub fn audio_tts(
     let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     let job = registry.create_audio_job(&request);
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
-    Ok(jobs.insert(job))
+    let inserted = jobs.insert(job);
+    drop(jobs);
+    persist_job(state.inner(), &inserted)?;
+    Ok(inserted)
 }
 
 #[tauri::command]
@@ -179,7 +198,10 @@ pub fn audio_stt(
     let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     let job = registry.create_audio_job(&request);
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
-    Ok(jobs.insert(job))
+    let inserted = jobs.insert(job);
+    drop(jobs);
+    persist_job(state.inner(), &inserted)?;
+    Ok(inserted)
 }
 
 #[tauri::command]
@@ -189,7 +211,17 @@ pub fn job_get(
 ) -> Result<Option<crate::domain::GenerationJob>, String> {
     let id = Uuid::parse_str(&id).map_err(|error| error.to_string())?;
     let jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
-    Ok(jobs.get(id))
+    if let Some(job) = jobs.get(id) {
+        return Ok(Some(job));
+    }
+    drop(jobs);
+    let database = state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?;
+    database
+        .get_snapshot("jobs", &id.to_string())
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -199,7 +231,12 @@ pub fn job_cancel(
 ) -> Result<Option<crate::domain::GenerationJob>, String> {
     let id = Uuid::parse_str(&id).map_err(|error| error.to_string())?;
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
-    Ok(jobs.cancel(id))
+    let result = jobs.cancel(id);
+    drop(jobs);
+    if let Some(ref job) = result {
+        persist_job(state.inner(), job)?;
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -209,7 +246,12 @@ pub fn job_retry(
 ) -> Result<Option<crate::domain::GenerationJob>, String> {
     let id = Uuid::parse_str(&id).map_err(|error| error.to_string())?;
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
-    Ok(jobs.retry(id))
+    let result = jobs.retry(id);
+    drop(jobs);
+    if let Some(ref job) = result {
+        persist_job(state.inner(), job)?;
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -218,8 +260,25 @@ pub fn job_list(
     status: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::domain::GenerationJob>, String> {
-    let jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
-    Ok(jobs.list(kind.as_deref(), status.as_deref()))
+    let database = state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?;
+    let jobs: Vec<crate::domain::GenerationJob> = database
+        .list_snapshots("jobs")
+        .map_err(|error| error.to_string())?;
+    Ok(jobs
+        .into_iter()
+        .filter(|job| {
+            let kind_matches = kind
+                .as_deref()
+                .is_none_or(|value| format!("{:?}", job.kind).eq_ignore_ascii_case(value));
+            let status_matches = status
+                .as_deref()
+                .is_none_or(|value| format!("{:?}", job.status).eq_ignore_ascii_case(value));
+            kind_matches && status_matches
+        })
+        .collect())
 }
 
 #[tauri::command]

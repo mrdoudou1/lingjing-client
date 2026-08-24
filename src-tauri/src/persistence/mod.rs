@@ -1,5 +1,5 @@
 use rusqlite::{params, Connection, Result as SqlResult};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -71,6 +71,12 @@ impl SqliteStore {
              CREATE TABLE IF NOT EXISTS chat_messages (
                id TEXT PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL,
                content TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS job_snapshots (
+               id TEXT PRIMARY KEY, payload_json TEXT NOT NULL, updated_at TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS asset_snapshots (
+               id TEXT PRIMARY KEY, payload_json TEXT NOT NULL, updated_at TEXT NOT NULL
              );",
         )?;
         self.connection.execute(
@@ -110,11 +116,77 @@ impl SqliteStore {
         }
         Ok(values)
     }
+
+    pub fn save_snapshot<T: Serialize>(&self, table: &str, id: &str, value: &T) -> SqlResult<()> {
+        let payload = serde_json::to_string(value)
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+        let query = match table {
+            "jobs" => "INSERT INTO job_snapshots(id,payload_json,updated_at) VALUES (?1,?2,datetime('now')) ON CONFLICT(id) DO UPDATE SET payload_json=excluded.payload_json,updated_at=excluded.updated_at",
+            "assets" => "INSERT INTO asset_snapshots(id,payload_json,updated_at) VALUES (?1,?2,datetime('now')) ON CONFLICT(id) DO UPDATE SET payload_json=excluded.payload_json,updated_at=excluded.updated_at",
+            _ => return Err(rusqlite::Error::InvalidParameterName(table.into())),
+        };
+        self.connection.execute(query, params![id, payload])?;
+        Ok(())
+    }
+
+    pub fn get_snapshot<T: DeserializeOwned>(&self, table: &str, id: &str) -> SqlResult<Option<T>> {
+        let query = match table {
+            "jobs" => "SELECT payload_json FROM job_snapshots WHERE id=?1",
+            "assets" => "SELECT payload_json FROM asset_snapshots WHERE id=?1",
+            _ => return Err(rusqlite::Error::InvalidParameterName(table.into())),
+        };
+        let mut statement = self.connection.prepare(query)?;
+        let mut rows = statement.query(params![id])?;
+        match rows.next()? {
+            Some(row) => {
+                let raw: String = row.get(0)?;
+                serde_json::from_str(&raw).map(Some).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub fn list_snapshots<T: DeserializeOwned>(&self, table: &str) -> SqlResult<Vec<T>> {
+        let query = match table {
+            "jobs" => "SELECT payload_json FROM job_snapshots ORDER BY updated_at DESC",
+            "assets" => "SELECT payload_json FROM asset_snapshots ORDER BY updated_at DESC",
+            _ => return Err(rusqlite::Error::InvalidParameterName(table.into())),
+        };
+        let mut statement = self.connection.prepare(query)?;
+        let rows = statement.query_map([], |row| {
+            let raw: String = row.get(0)?;
+            serde_json::from_str(&raw).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn delete_snapshot(&self, table: &str, id: &str) -> SqlResult<()> {
+        let query = match table {
+            "jobs" => "DELETE FROM job_snapshots WHERE id=?1",
+            "assets" => "DELETE FROM asset_snapshots WHERE id=?1",
+            _ => return Err(rusqlite::Error::InvalidParameterName(table.into())),
+        };
+        self.connection.execute(query, params![id])?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::SqliteStore;
+    use serde::{Deserialize, Serialize};
 
     #[test]
     fn migration_creates_settings_store() {
@@ -123,5 +195,28 @@ mod tests {
             .set_setting("theme", "\"dark\"")
             .expect("setting should save");
         assert_eq!(store.get_setting("theme").unwrap(), Some("\"dark\"".into()));
+    }
+
+    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    struct Snapshot {
+        id: String,
+        status: String,
+    }
+
+    #[test]
+    fn snapshots_survive_repository_round_trip() {
+        let store = SqliteStore::in_memory().expect("sqlite should initialize");
+        let snapshot = Snapshot {
+            id: "job-1".into(),
+            status: "queued".into(),
+        };
+        store
+            .save_snapshot("jobs", "job-1", &snapshot)
+            .expect("snapshot should save");
+        let restored: Snapshot = store
+            .get_snapshot("jobs", "job-1")
+            .unwrap()
+            .expect("snapshot should restore");
+        assert_eq!(restored, snapshot);
     }
 }
