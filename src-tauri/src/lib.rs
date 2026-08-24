@@ -30,6 +30,8 @@ pub fn run() {
             commands::chat_send,
             commands::video_create_job,
             commands::image_create_job,
+            commands::audio_tts,
+            commands::audio_stt,
             commands::job_get,
             commands::job_cancel,
             commands::job_retry,

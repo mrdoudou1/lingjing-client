@@ -1,4 +1,4 @@
-import type { ChatDelta, ChatRequest, GenerationJob, ImageRequest, ModelCapabilities, VideoOperation } from '../../types/domain'
+import type { AudioRequest, ChatDelta, ChatRequest, GenerationJob, ImageRequest, ModelCapabilities, VideoOperation } from '../../types/domain'
 
 export interface VideoRequest {
   gatewayProfileId: string
@@ -22,5 +22,6 @@ export interface GatewayAdapter {
   resolveCapabilities(modelId: string): Promise<ModelCapabilities>
   chatStream(request: ChatRequest, signal?: AbortSignal): AsyncGenerator<ChatDelta>
   createImageJob(request: ImageRequest): Promise<GenerationJob<ImageRequest>>
+  createAudioJob(request: AudioRequest): Promise<GenerationJob<AudioRequest>>
   createVideoJob(request: VideoRequest): Promise<GenerationJob<VideoRequest>>
 }

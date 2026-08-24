@@ -49,6 +49,18 @@ export interface ImageRequest {
   referenceAssetIds?: string[]
 }
 
+export interface AudioRequest {
+  gatewayProfileId: string
+  modelId: string
+  kind: 'tts' | 'stt'
+  text?: string
+  sourceFileName?: string
+  voice?: string
+  language?: string
+  format: string
+  speed?: number
+}
+
 export interface GatewayProfile {
   id: string
   name: string

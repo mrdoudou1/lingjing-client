@@ -76,6 +76,19 @@ pub struct ImageRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioRequest {
+    pub gateway_profile_id: String,
+    pub model_id: String,
+    pub kind: String,
+    pub text: Option<String>,
+    pub source_file_name: Option<String>,
+    pub voice: Option<String>,
+    pub language: Option<String>,
+    pub format: String,
+    pub speed: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSendInput {
     pub gateway_profile_id: String,
     pub model_id: String,

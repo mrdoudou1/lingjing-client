@@ -1,5 +1,5 @@
 use crate::{
-    domain::{ChatSendInput, ImageRequest, VideoRequest},
+    domain::{AudioRequest, ChatSendInput, ImageRequest, VideoRequest},
     AppState,
 };
 use tauri::State;
@@ -60,6 +60,41 @@ pub fn image_create_job(
     }
     let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     let job = registry.create_image_job(&request);
+    let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
+    Ok(jobs.insert(job))
+}
+
+#[tauri::command]
+pub fn audio_tts(
+    request: AudioRequest,
+    state: State<'_, AppState>,
+) -> Result<crate::domain::GenerationJob, String> {
+    if request.kind != "tts" || request.text.as_deref().unwrap_or("").trim().is_empty() {
+        return Err("请输入需要合成的文本".into());
+    }
+    let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
+    let job = registry.create_audio_job(&request);
+    let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
+    Ok(jobs.insert(job))
+}
+
+#[tauri::command]
+pub fn audio_stt(
+    request: AudioRequest,
+    state: State<'_, AppState>,
+) -> Result<crate::domain::GenerationJob, String> {
+    if request.kind != "stt"
+        || request
+            .source_file_name
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+    {
+        return Err("请先选择音频或视频文件".into());
+    }
+    let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
+    let job = registry.create_audio_job(&request);
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
     Ok(jobs.insert(job))
 }
