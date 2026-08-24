@@ -76,11 +76,20 @@ pub async fn gateway_refresh_models(
     let models = crate::gateways::http::GatewayHttpClient::default()
         .list_models(&profile, key.as_deref())
         .await?;
+    let snapshots = models
+        .iter()
+        .map(|model| {
+            (
+                model.clone(),
+                crate::gateways::GatewayRegistry::capabilities_for_model(model),
+            )
+        })
+        .collect::<Vec<_>>();
     state
         .database
         .lock()
         .map_err(|_| "database lock poisoned")?
-        .save_model_snapshots(&profile.id, &models)
+        .save_model_snapshots(&profile.id, &snapshots)
         .map_err(|error| error.to_string())?;
     Ok(models)
 }

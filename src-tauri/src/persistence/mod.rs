@@ -170,15 +170,19 @@ impl SqliteStore {
         rows.collect()
     }
 
-    pub fn save_model_snapshots(&self, profile_id: &str, models: &[String]) -> SqlResult<()> {
+    pub fn save_model_snapshots(
+        &self,
+        profile_id: &str,
+        models: &[(String, serde_json::Value)],
+    ) -> SqlResult<()> {
         let now = chrono::Utc::now().to_rfc3339();
-        for model_id in models {
+        for (model_id, capabilities_json) in models {
             let snapshot = ModelSnapshot {
                 id: format!("{profile_id}:{model_id}"),
                 gateway_profile_id: profile_id.to_string(),
                 model_id: model_id.clone(),
                 display_name: None,
-                capabilities_json: serde_json::json!({}),
+                capabilities_json: capabilities_json.clone(),
                 raw_json: None,
                 last_synced_at: now.clone(),
             };
@@ -551,11 +555,30 @@ mod tests {
     fn model_snapshots_refresh_by_gateway() {
         let store = SqliteStore::in_memory().expect("sqlite should initialize");
         store
-            .save_model_snapshots("gateway-1", &["gpt-4.1".into(), "flux-pro".into()])
+            .save_model_snapshots(
+                "gateway-1",
+                &[
+                    (
+                        "gpt-4.1".into(),
+                        serde_json::json!({ "chat": { "streaming": true } }),
+                    ),
+                    (
+                        "flux-pro".into(),
+                        serde_json::json!({ "image": { "supportsEdit": true } }),
+                    ),
+                ],
+            )
             .unwrap();
         let snapshots = store.list_model_snapshots("gateway-1").unwrap();
         assert_eq!(snapshots.len(), 2);
         assert_eq!(snapshots[0].gateway_profile_id, "gateway-1");
-        assert_eq!(snapshots[1].capabilities_json, serde_json::json!({}));
+        let flux = snapshots
+            .iter()
+            .find(|snapshot| snapshot.model_id == "flux-pro")
+            .unwrap();
+        assert_eq!(
+            flux.capabilities_json,
+            serde_json::json!({ "image": { "supportsEdit": true } })
+        );
     }
 }

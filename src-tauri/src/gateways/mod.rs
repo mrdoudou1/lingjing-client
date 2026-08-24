@@ -59,6 +59,27 @@ impl GatewayRegistry {
             "mock-audio".into(),
         ]
     }
+    pub fn capabilities_for_model(model_id: &str) -> serde_json::Value {
+        let normalized = model_id.to_lowercase();
+        if normalized.contains("image") || normalized.contains("flux") {
+            return serde_json::json!({
+                "image": { "count": { "min": 1, "max": 4, "default": 1 }, "aspectRatios": ["1:1", "16:9", "9:16"], "resolutions": ["1k", "2k"], "qualities": ["draft", "standard", "high"], "supportsEdit": true }
+            });
+        }
+        if normalized.contains("audio") || normalized.contains("speech") {
+            return serde_json::json!({
+                "tts": { "voices": ["Aria", "River"], "formats": ["MP3", "WAV"], "streaming": false },
+                "stt": { "languages": ["zh", "en"], "formats": ["TXT", "JSON", "SRT", "VTT"], "timestamps": true, "realtime": false }
+            });
+        }
+        if normalized.contains("video") || normalized.contains("veo") || normalized.contains("sora")
+        {
+            return serde_json::json!({
+                "video": { "operations": ["generate", "edit", "extend"], "durations": [6, 12, 18], "aspectRatios": ["16:9", "9:16", "1:1"], "resolutions": ["720p", "1080p"], "maxReferenceImages": 3, "maxReferenceVoices": 1 }
+            });
+        }
+        serde_json::json!({ "chat": { "streaming": true, "markdown": true } })
+    }
     pub fn test(&self, _profile_id: &str) -> serde_json::Value {
         serde_json::json!({"ok": true, "latencyMs": 42})
     }
