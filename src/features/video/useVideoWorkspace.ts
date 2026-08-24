@@ -5,7 +5,7 @@ import type { VideoRequest } from '../../services/gateway/types'
 import { validateVideoRequest } from './videoValidation'
 import { VideoJobService } from '../../services/jobs/videoJobService'
 
-const adapter = gatewayRegistry.get('mock')
+const adapter = gatewayRegistry.runtime()
 const videoJobs = new VideoJobService(adapter)
 
 export function useVideoWorkspace(notify: Notify) {

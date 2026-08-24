@@ -4,7 +4,7 @@ import { gatewayRegistry } from '../../services/gateway/registry'
 import { AudioJobService } from '../../services/jobs/audioJobService'
 import { validateAudioRequest } from './audioValidation'
 
-const adapter = gatewayRegistry.get('mock')
+const adapter = gatewayRegistry.runtime()
 const audioJobs = new AudioJobService(adapter)
 const audioCapabilities: ModelCapabilities = { tts: { voices: ['Aria · 温暖女声', 'River · 平静男声'], formats: ['MP3', 'WAV'], streaming: false }, stt: { languages: ['中文（普通话）', 'English'], formats: ['TXT', 'JSON', 'SRT', 'VTT'], timestamps: true, realtime: false } }
 

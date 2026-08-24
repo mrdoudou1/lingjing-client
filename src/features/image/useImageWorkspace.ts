@@ -4,7 +4,7 @@ import { gatewayRegistry } from '../../services/gateway/registry'
 import { ImageJobService } from '../../services/jobs/imageJobService'
 import { validateImageRequest } from './imageValidation'
 
-const adapter = gatewayRegistry.get('mock')
+const adapter = gatewayRegistry.runtime()
 const imageJobs = new ImageJobService(adapter)
 
 export function useImageWorkspace(notify: Notify) {
