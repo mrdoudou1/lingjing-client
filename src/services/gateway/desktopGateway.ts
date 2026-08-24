@@ -13,7 +13,13 @@ function capabilitiesFor(modelId: string): ModelCapabilities {
 export class DesktopGatewayAdapter implements GatewayAdapter {
   async testConnection(gatewayProfileId = 'mock-default') { return tauriBridge.invoke<{ ok: boolean; latencyMs: number }>('gateway_test_connection', { profileId: gatewayProfileId }) }
   async listModels(gatewayProfileId = 'mock-default') { return tauriBridge.invoke<string[]>('gateway_refresh_models', { profileId: gatewayProfileId }) }
-  async resolveCapabilities(modelId: string, _gatewayProfileId?: string) { return capabilitiesFor(modelId) }
+  async resolveCapabilities(modelId: string, gatewayProfileId = 'mock-default') {
+    try {
+      return await tauriBridge.invoke<ModelCapabilities>('gateway_get_model_capabilities', { profileId: gatewayProfileId, modelId })
+    } catch {
+      return capabilitiesFor(modelId)
+    }
+  }
   async *chatStream(request: ChatRequest, signal?: AbortSignal): AsyncGenerator<ChatDelta> {
     const last = request.messages.at(-1)?.content ?? ''
     const sessionId = request.sessionId ?? 'desktop-session'

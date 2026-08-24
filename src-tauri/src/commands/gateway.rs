@@ -66,6 +66,25 @@ pub async fn gateway_refresh_models(
 }
 
 #[tauri::command]
+pub fn gateway_get_model_capabilities(
+    profile_id: String,
+    model_id: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let snapshot = state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?
+        .list_model_snapshots(&profile_id)
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|snapshot| snapshot.model_id == model_id);
+    Ok(snapshot
+        .map(|value| value.capabilities_json)
+        .unwrap_or_else(|| crate::gateways::GatewayRegistry::capabilities_for_model(&model_id)))
+}
+
+#[tauri::command]
 pub fn gateway_create_profile(
     profile: GatewayProfile,
     state: State<'_, AppState>,

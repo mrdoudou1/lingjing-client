@@ -52,6 +52,7 @@ pub fn run() {
             commands::gateway_list_profiles,
             commands::gateway_test_connection,
             commands::gateway_refresh_models,
+            commands::gateway_get_model_capabilities,
             commands::gateway_create_profile,
             commands::gateway_update_profile,
             commands::gateway_delete_profile,
