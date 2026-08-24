@@ -1,9 +1,10 @@
-use super::{persist_asset, persist_job};
+use super::{emit_asset_ready, emit_job_event, persist_asset, persist_job};
 use crate::{domain::ImageRequest, AppState};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub async fn image_create_job(
+    app: AppHandle,
     request: ImageRequest,
     state: State<'_, AppState>,
 ) -> Result<crate::domain::GenerationJob, String> {
@@ -30,6 +31,7 @@ pub async fn image_create_job(
         jobs.insert(job)
     };
     persist_job(state.inner(), &inserted)?;
+    emit_job_event(&app, "job://created", &inserted);
     if profile.base_url.starts_with("mock://") {
         return Ok(inserted);
     }
@@ -48,6 +50,7 @@ pub async fn image_create_job(
             ) {
                 drop(jobs);
                 persist_job(state.inner(), &failed)?;
+                emit_job_event(&app, "job://failed", &failed);
             }
             return Err(error);
         }
@@ -69,20 +72,19 @@ pub async fn image_create_job(
             .lock()
             .map_err(|_| "media lock poisoned")?
             .save_bytes(&asset_id, "png", &bytes)?;
-        persist_asset(
-            state.inner(),
-            &crate::domain::Asset {
-                id: asset_id.clone(),
-                job_id: Some(inserted.id),
-                kind: "image".into(),
-                mime_type: "image/png".into(),
-                local_path: path.to_string_lossy().into_owned(),
-                thumbnail_path: None,
-                size_bytes: bytes.len() as u64,
-                favorite: false,
-                created_at: chrono::Utc::now(),
-            },
-        )?;
+        let asset = crate::domain::Asset {
+            id: asset_id.clone(),
+            job_id: Some(inserted.id),
+            kind: "image".into(),
+            mime_type: "image/png".into(),
+            local_path: path.to_string_lossy().into_owned(),
+            thumbnail_path: None,
+            size_bytes: bytes.len() as u64,
+            favorite: false,
+            created_at: chrono::Utc::now(),
+        };
+        persist_asset(state.inner(), &asset)?;
+        emit_asset_ready(&app, &asset);
     }
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
     let completed = jobs
@@ -95,5 +97,6 @@ pub async fn image_create_job(
         .ok_or_else(|| "job disappeared".to_string())?;
     drop(jobs);
     persist_job(state.inner(), &completed)?;
+    emit_job_event(&app, "job://status", &completed);
     Ok(completed)
 }

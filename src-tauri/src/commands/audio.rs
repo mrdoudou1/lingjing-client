@@ -1,9 +1,10 @@
-use super::{persist_asset, persist_job};
+use super::{emit_asset_ready, emit_job_event, persist_asset, persist_job};
 use crate::{domain::AudioRequest, AppState};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub async fn audio_tts(
+    app: AppHandle,
     request: AudioRequest,
     state: State<'_, AppState>,
 ) -> Result<crate::domain::GenerationJob, String> {
@@ -27,6 +28,7 @@ pub async fn audio_tts(
         jobs.insert(job)
     };
     persist_job(state.inner(), &inserted)?;
+    emit_job_event(&app, "job://created", &inserted);
     if profile.base_url.starts_with("mock://") {
         return Ok(inserted);
     }
@@ -45,6 +47,7 @@ pub async fn audio_tts(
             ) {
                 drop(jobs);
                 persist_job(state.inner(), &failed)?;
+                emit_job_event(&app, "job://failed", &failed);
             }
             return Err(error);
         }
@@ -56,24 +59,23 @@ pub async fn audio_tts(
         .lock()
         .map_err(|_| "media lock poisoned")?
         .save_bytes(&asset_id, &extension, &bytes)?;
-    persist_asset(
-        state.inner(),
-        &crate::domain::Asset {
-            id: asset_id,
-            job_id: Some(inserted.id),
-            kind: "audio".into(),
-            mime_type: if extension == "wav" {
-                "audio/wav".into()
-            } else {
-                "audio/mpeg".into()
-            },
-            local_path: path.to_string_lossy().into_owned(),
-            thumbnail_path: None,
-            size_bytes: bytes.len() as u64,
-            favorite: false,
-            created_at: chrono::Utc::now(),
+    let asset = crate::domain::Asset {
+        id: asset_id,
+        job_id: Some(inserted.id),
+        kind: "audio".into(),
+        mime_type: if extension == "wav" {
+            "audio/wav".into()
+        } else {
+            "audio/mpeg".into()
         },
-    )?;
+        local_path: path.to_string_lossy().into_owned(),
+        thumbnail_path: None,
+        size_bytes: bytes.len() as u64,
+        favorite: false,
+        created_at: chrono::Utc::now(),
+    };
+    persist_asset(state.inner(), &asset)?;
+    emit_asset_ready(&app, &asset);
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
     let completed = jobs
         .update(
@@ -85,11 +87,13 @@ pub async fn audio_tts(
         .ok_or_else(|| "job disappeared".to_string())?;
     drop(jobs);
     persist_job(state.inner(), &completed)?;
+    emit_job_event(&app, "job://status", &completed);
     Ok(completed)
 }
 
 #[tauri::command]
 pub async fn audio_stt(
+    app: AppHandle,
     request: AudioRequest,
     state: State<'_, AppState>,
 ) -> Result<crate::domain::GenerationJob, String> {
@@ -120,6 +124,7 @@ pub async fn audio_stt(
         jobs.insert(job)
     };
     persist_job(state.inner(), &inserted)?;
+    emit_job_event(&app, "job://created", &inserted);
     if profile.base_url.starts_with("mock://") {
         return Ok(inserted);
     }
@@ -138,6 +143,7 @@ pub async fn audio_stt(
             ) {
                 drop(jobs);
                 persist_job(state.inner(), &failed)?;
+                emit_job_event(&app, "job://failed", &failed);
             }
             return Err(error);
         }
@@ -154,24 +160,23 @@ pub async fn audio_stt(
         .lock()
         .map_err(|_| "media lock poisoned")?
         .save_bytes(&asset_id, &extension, &content)?;
-    persist_asset(
-        state.inner(),
-        &crate::domain::Asset {
-            id: asset_id,
-            job_id: Some(inserted.id),
-            kind: "audio".into(),
-            mime_type: if extension == "json" {
-                "application/json".into()
-            } else {
-                "text/plain".into()
-            },
-            local_path: path.to_string_lossy().into_owned(),
-            thumbnail_path: None,
-            size_bytes: content.len() as u64,
-            favorite: false,
-            created_at: chrono::Utc::now(),
+    let asset = crate::domain::Asset {
+        id: asset_id,
+        job_id: Some(inserted.id),
+        kind: "audio".into(),
+        mime_type: if extension == "json" {
+            "application/json".into()
+        } else {
+            "text/plain".into()
         },
-    )?;
+        local_path: path.to_string_lossy().into_owned(),
+        thumbnail_path: None,
+        size_bytes: content.len() as u64,
+        favorite: false,
+        created_at: chrono::Utc::now(),
+    };
+    persist_asset(state.inner(), &asset)?;
+    emit_asset_ready(&app, &asset);
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
     let completed = jobs
         .update(
@@ -183,5 +188,6 @@ pub async fn audio_stt(
         .ok_or_else(|| "job disappeared".to_string())?;
     drop(jobs);
     persist_job(state.inner(), &completed)?;
+    emit_job_event(&app, "job://status", &completed);
     Ok(completed)
 }

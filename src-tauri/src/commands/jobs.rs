@@ -1,6 +1,6 @@
-use super::persist_job;
+use super::{emit_job_event, persist_job};
 use crate::AppState;
-use tauri::State;
+use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 #[tauri::command]
@@ -25,6 +25,7 @@ pub fn job_get(
 
 #[tauri::command]
 pub async fn job_cancel(
+    app: AppHandle,
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<crate::domain::GenerationJob>, String> {
@@ -71,6 +72,7 @@ pub async fn job_cancel(
     drop(jobs);
     if let Some(ref job) = result {
         persist_job(state.inner(), job)?;
+        emit_job_event(&app, "job://status", job);
         return Ok(result);
     }
     let database = state
@@ -87,11 +89,13 @@ pub async fn job_cancel(
     database
         .save_snapshot("jobs", &job.id.to_string(), &job)
         .map_err(|error| error.to_string())?;
+    emit_job_event(&app, "job://status", &job);
     Ok(Some(job))
 }
 
 #[tauri::command]
 pub fn job_retry(
+    app: AppHandle,
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<crate::domain::GenerationJob>, String> {
@@ -101,6 +105,7 @@ pub fn job_retry(
     drop(jobs);
     if let Some(ref job) = result {
         persist_job(state.inner(), job)?;
+        emit_job_event(&app, "job://created", job);
         return Ok(result);
     }
     let database = state
@@ -120,11 +125,13 @@ pub fn job_retry(
     database
         .save_snapshot("jobs", &job.id.to_string(), &job)
         .map_err(|error| error.to_string())?;
+    emit_job_event(&app, "job://created", &job);
     Ok(Some(job))
 }
 
 #[tauri::command]
 pub fn job_update(
+    app: AppHandle,
     id: String,
     status: String,
     progress: f32,
@@ -140,6 +147,14 @@ pub fn job_update(
     drop(jobs);
     if let Some(ref job) = result {
         persist_job(state.inner(), job)?;
+        let event = if matches!(job.status, crate::domain::JobStatus::Failed) {
+            "job://failed"
+        } else if matches!(job.status, crate::domain::JobStatus::Running) {
+            "job://progress"
+        } else {
+            "job://status"
+        };
+        emit_job_event(&app, event, job);
     }
     Ok(result)
 }

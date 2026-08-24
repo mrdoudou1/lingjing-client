@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Asset } from '../../types/domain'
 import { assetRepository } from '../../services/assets/assetRepository'
+import { subscribeToJobEvents } from '../../services/jobs/jobEvents'
 
 export function useAssets() {
   const [assets, setAssets] = useState<Asset[]>([])
@@ -14,6 +15,15 @@ export function useAssets() {
       if (mounted) { setAssets(next); setLoading(false) }
     })
     return () => { mounted = false }
+  }, [])
+  useEffect(() => {
+    let mounted = true
+    let stop: (() => void) | undefined
+    void subscribeToJobEvents(() => {
+      if (!mounted) return
+      void assetRepository.reload().then(() => assetRepository.list()).then(next => { if (mounted) setAssets(next) })
+    }).then(unlisten => { stop = unlisten })
+    return () => { mounted = false; stop?.() }
   }, [])
   const visibleAssets = useMemo(() => {
     const normalized = query.trim().toLowerCase()
