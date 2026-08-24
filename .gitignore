@@ -27,4 +27,6 @@ output/
 
 # Legacy prototype snapshot
 mvp-scaffold/
+src-tauri/target/
+src-tauri/gen/
 

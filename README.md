@@ -18,6 +18,18 @@ src/
 
 当前已接入 `MockGatewayAdapter` 和 `MockJobManager`，视频页面可以跑通本地任务状态模拟。后续将用 Tauri Commands、Rust JobManager、SQLite 和系统密钥存储替换这些适配器。
 
+Tauri/Rust Core 已按 SDD 分层建立在 `src-tauri/`：
+
+```text
+src-tauri/src/
+├─ commands/      Tauri command facade
+├─ domain/        GenerationJob、GatewayProfile、Asset 等领域模型
+├─ gateways/      GatewayRegistry 与 Mock Gateway
+├─ jobs/          任务状态和取消/重试边界
+├─ assets/        资产仓库边界
+└─ persistence/   设置持久化边界
+```
+
 ## 开发
 
 ```bash
