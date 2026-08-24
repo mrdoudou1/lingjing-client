@@ -2,7 +2,7 @@ import { assetRepository } from '../assets/assetRepository'
 import type { GatewayAdapter, VideoRequest } from '../gateway/types'
 import { MockJobManager, type JobProgress } from './jobManager'
 import { historyRepository } from './historyRepository'
-import { cancelDesktopJob, updateDesktopJob } from './desktopJobLifecycle'
+import { cancelDesktopJob, pollDesktopVideoJob, updateDesktopJob } from './desktopJobLifecycle'
 
 export class VideoJobService {
   private readonly manager = new MockJobManager()
@@ -15,6 +15,22 @@ export class VideoJobService {
   async start(request: VideoRequest, onProgress: (state: JobProgress) => void, onCreated?: (jobId: string) => void) {
     const job = await this.adapter.createVideoJob(request)
     onCreated?.(job.id)
+    if (job.status === 'queued') {
+      let current = await pollDesktopVideoJob(job.id, request)
+      while (current && (current.status === 'queued' || current.status === 'running')) {
+        onProgress({ status: current.status, progress: current.progress })
+        await new Promise(resolve => window.setTimeout(resolve, 1000))
+        current = await pollDesktopVideoJob(job.id, request)
+      }
+      if (current) {
+        onProgress({ status: current.status, progress: current.progress })
+        await historyRepository.recordJob(current, current.status)
+        if (current.status === 'succeeded') {
+          await assetRepository.reload()
+        }
+        return current
+      }
+    }
     updateDesktopJob(job.id, 'queued', 0)
     const controller = new AbortController()
     this.controllers.set(job.id, controller)

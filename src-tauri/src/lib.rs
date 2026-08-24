@@ -61,6 +61,7 @@ pub fn run() {
             commands::chat_stream,
             commands::chat_stop,
             commands::video_create_job,
+            commands::video_poll_job,
             commands::image_create_job,
             commands::audio_tts,
             commands::audio_stt,

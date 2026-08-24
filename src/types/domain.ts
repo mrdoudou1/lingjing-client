@@ -90,6 +90,7 @@ export interface GenerationJob<TRequest = unknown> {
   progress: number
   request: TRequest
   errorMessage?: string
+  remoteJobId?: string
   createdAt: string
 }
 

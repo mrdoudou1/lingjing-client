@@ -73,6 +73,7 @@ impl GatewayRegistry {
             progress: 0.0,
             request_json: serde_json::to_value(request).unwrap_or_default(),
             error_message: None,
+            remote_job_id: None,
             created_at: Utc::now(),
         }
     }
@@ -87,6 +88,7 @@ impl GatewayRegistry {
             progress: 0.0,
             request_json: serde_json::to_value(request).unwrap_or_default(),
             error_message: None,
+            remote_job_id: None,
             created_at: Utc::now(),
         }
     }
@@ -105,6 +107,7 @@ impl GatewayRegistry {
             progress: 0.0,
             request_json: serde_json::to_value(request).unwrap_or_default(),
             error_message: None,
+            remote_job_id: None,
             created_at: Utc::now(),
         }
     }

@@ -49,6 +49,8 @@ pub struct GenerationJob {
     pub progress: f32,
     pub request_json: serde_json::Value,
     pub error_message: Option<String>,
+    #[serde(default)]
+    pub remote_job_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -63,6 +65,8 @@ pub struct VideoRequest {
     pub reference_image_asset_ids: Vec<String>,
     pub reference_voice_ids: Vec<String>,
     pub duration_sec: Option<u32>,
+    #[serde(default)]
+    pub extension_duration_sec: Option<u32>,
     pub aspect_ratio: Option<String>,
     pub resolution: Option<String>,
 }

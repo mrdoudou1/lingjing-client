@@ -43,6 +43,12 @@ impl JobManager {
             job.clone()
         })
     }
+    pub fn set_remote_job_id(&mut self, id: Uuid, remote_job_id: String) -> Option<GenerationJob> {
+        self.jobs.get_mut(&id).map(|job| {
+            job.remote_job_id = Some(remote_job_id);
+            job.clone()
+        })
+    }
     pub fn list(&self, kind: Option<&str>, status: Option<&str>) -> Vec<GenerationJob> {
         self.jobs
             .values()
@@ -89,6 +95,7 @@ mod tests {
             progress: 0.0,
             request_json: serde_json::json!({"prompt":"demo"}),
             error_message: None,
+            remote_job_id: None,
             created_at: Utc::now(),
         }
     }
