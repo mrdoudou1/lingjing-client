@@ -50,12 +50,14 @@ export function useChatWorkspace() {
     persist(previous => previous.map(session => session.id === sessionId ? updater(session) : session))
   }, [persist])
 
-  const send = useCallback(async (content: string) => {
+  const send = useCallback(async (content: string, regenerate = false) => {
     if (!activeSession || !content.trim() || isStreaming) return
     const userMessage: ChatMessage = { id: createId('message'), role: 'user', content: content.trim(), status: 'completed', createdAt: new Date().toISOString() }
     const assistantMessage: ChatMessage = { id: createId('message'), role: 'assistant', content: '', status: 'streaming', createdAt: new Date().toISOString() }
     const sessionId = activeSession.id
-    const nextSession: ChatSession = { ...activeSession, title: activeSession.messages.length ? activeSession.title : content.trim().slice(0, 24), messages: [...activeSession.messages, userMessage, assistantMessage], updatedAt: new Date().toISOString() }
+    const lastUserIndex = regenerate ? activeSession.messages.map(message => message.role).lastIndexOf('user') : -1
+    const baseMessages = lastUserIndex >= 0 ? activeSession.messages.slice(0, lastUserIndex + 1) : activeSession.messages
+    const nextSession: ChatSession = { ...activeSession, title: activeSession.messages.length ? activeSession.title : content.trim().slice(0, 24), messages: [...(regenerate ? baseMessages : [...activeSession.messages, userMessage]), assistantMessage], updatedAt: new Date().toISOString() }
     persist(previous => previous.map(session => session.id === sessionId ? nextSession : session))
     setIsStreaming(true)
     const abortController = new AbortController(); controller.current = abortController
@@ -71,10 +73,16 @@ export function useChatWorkspace() {
     } finally { controller.current = null; setIsStreaming(false) }
   }, [activeSession, isStreaming, persist, updateSession])
 
+  const regenerate = useCallback(() => {
+    if (!activeSession || isStreaming) return
+    const lastUser = [...activeSession.messages].reverse().find(message => message.role === 'user')
+    if (lastUser) void send(lastUser.content, true)
+  }, [activeSession, isStreaming, send])
+
   const stop = useCallback(() => controller.current?.abort(), [])
   const createSession = useCallback(() => { const next = initialSession(); persist(previous => [next, ...previous]); setActiveSessionId(next.id) }, [persist])
   const deleteSession = useCallback((sessionId: string) => { const normalized = sessions.filter(session => session.id !== sessionId); const next = normalized.length ? normalized : [initialSession()]; persist(next); if (activeSessionId === sessionId) setActiveSessionId(next[0].id) }, [activeSessionId, persist, sessions])
   const setModel = useCallback((modelId: string) => { if (!activeSession) return; updateSession(activeSession.id, session => ({ ...session, modelId })) }, [activeSession, updateSession])
 
-  return { sessions, activeSession, activeSessionId, setActiveSessionId, models, isStreaming, send, stop, createSession, deleteSession, setModel }
+  return { sessions, activeSession, activeSessionId, setActiveSessionId, models, isStreaming, send, regenerate, stop, createSession, deleteSession, setModel }
 }
