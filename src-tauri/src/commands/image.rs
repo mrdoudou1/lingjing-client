@@ -2,6 +2,81 @@ use super::{emit_asset_ready, emit_job_event, persist_asset, persist_job};
 use crate::{domain::ImageRequest, AppState};
 use tauri::{AppHandle, State};
 
+fn model_capabilities(
+    state: &AppState,
+    profile_id: &str,
+    model_id: &str,
+) -> Result<serde_json::Value, String> {
+    let snapshot = state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?
+        .list_model_snapshots(profile_id)
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|snapshot| snapshot.model_id == model_id);
+    Ok(snapshot
+        .map(|snapshot| snapshot.capabilities_json)
+        .unwrap_or_else(|| crate::gateways::GatewayRegistry::capabilities_for_model(model_id)))
+}
+
+fn validate_image_request(
+    request: &ImageRequest,
+    capabilities: &serde_json::Value,
+) -> Result<(), String> {
+    if request.prompt.trim().is_empty() {
+        return Err("VALIDATION_FAILED: image prompt is empty".into());
+    }
+    let image = capabilities.get("image").ok_or_else(|| {
+        "CAPABILITY_UNSUPPORTED: model does not support image generation".to_string()
+    })?;
+    let count = image.get("count").cloned().unwrap_or_default();
+    let min = count
+        .get("min")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(1);
+    let max = count
+        .get("max")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(1);
+    if (request.count as u64) < min || (request.count as u64) > max {
+        return Err("VALIDATION_FAILED: image count is outside model limits".into());
+    }
+    if let Some(aspect_ratio) = request.aspect_ratio.as_deref() {
+        if let Some(values) = image.get("aspectRatios").and_then(|value| value.as_array()) {
+            if !values
+                .iter()
+                .any(|value| value.as_str() == Some(aspect_ratio))
+            {
+                return Err("VALIDATION_FAILED: aspect ratio is not supported by model".into());
+            }
+        }
+    }
+    if let Some(resolution) = request.resolution.as_deref() {
+        if let Some(values) = image.get("resolutions").and_then(|value| value.as_array()) {
+            if !values
+                .iter()
+                .any(|value| value.as_str() == Some(resolution))
+            {
+                return Err("VALIDATION_FAILED: resolution is not supported by model".into());
+            }
+        }
+    }
+    if let Some(quality) = request.quality.as_deref() {
+        if let Some(values) = image.get("qualities").and_then(|value| value.as_array()) {
+            if !values.iter().any(|value| value.as_str() == Some(quality)) {
+                return Err("VALIDATION_FAILED: quality is not supported by model".into());
+            }
+        }
+    }
+    if !request.reference_asset_ids.is_empty()
+        && image.get("supportsEdit").and_then(|value| value.as_bool()) != Some(true)
+    {
+        return Err("CAPABILITY_UNSUPPORTED: model does not support image references".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn image_create_job(
     app: AppHandle,
@@ -14,6 +89,12 @@ pub async fn image_create_job(
     if request.count == 0 || request.count > 4 {
         return Err("图片数量必须在 1 到 4 张之间".into());
     }
+    let capabilities = model_capabilities(
+        state.inner(),
+        &request.gateway_profile_id,
+        &request.model_id,
+    )?;
+    validate_image_request(&request, &capabilities)?;
     let (job, profile, key) = {
         let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
         let profile = registry
@@ -99,4 +180,52 @@ pub async fn image_create_job(
     persist_job(state.inner(), &completed)?;
     emit_job_event(&app, "job://status", &completed);
     Ok(completed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_image_request;
+    use crate::domain::ImageRequest;
+
+    fn request() -> ImageRequest {
+        ImageRequest {
+            gateway_profile_id: "mock-default".into(),
+            model_id: "gpt-image-1".into(),
+            prompt: "a paper crane".into(),
+            count: 2,
+            aspect_ratio: Some("1:1".into()),
+            resolution: Some("1k".into()),
+            quality: Some("standard".into()),
+            reference_asset_ids: Vec::new(),
+        }
+    }
+
+    fn capabilities() -> serde_json::Value {
+        serde_json::json!({
+            "image": {
+                "count": { "min": 1, "max": 4 },
+                "aspectRatios": ["1:1"],
+                "resolutions": ["1k"],
+                "qualities": ["standard"],
+                "supportsEdit": true
+            }
+        })
+    }
+
+    #[test]
+    fn validates_supported_image_request() {
+        assert!(validate_image_request(&request(), &capabilities()).is_ok());
+    }
+
+    #[test]
+    fn rejects_invalid_count_and_reference_capability() {
+        let mut invalid = request();
+        invalid.count = 5;
+        assert!(validate_image_request(&invalid, &capabilities()).is_err());
+        let mut unsupported = request();
+        unsupported.reference_asset_ids = vec!["ref".into()];
+        let mut caps = capabilities();
+        caps["image"]["supportsEdit"] = serde_json::Value::Bool(false);
+        assert!(validate_image_request(&unsupported, &caps).is_err());
+    }
 }
