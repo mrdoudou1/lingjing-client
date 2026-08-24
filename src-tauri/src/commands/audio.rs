@@ -147,6 +147,9 @@ pub async fn audio_tts(
         let profile = registry
             .profile(&request.gateway_profile_id)
             .ok_or_else(|| "GATEWAY_NOT_FOUND".to_string())?;
+        if !profile.enabled {
+            return Err("GATEWAY_DISABLED: gateway profile is disabled".into());
+        }
         let key = state
             .secrets
             .lock()
@@ -296,6 +299,9 @@ pub async fn audio_stt(
         let profile = registry
             .profile(&request.gateway_profile_id)
             .ok_or_else(|| "GATEWAY_NOT_FOUND".to_string())?;
+        if !profile.enabled {
+            return Err("GATEWAY_DISABLED: gateway profile is disabled".into());
+        }
         let key = state
             .secrets
             .lock()

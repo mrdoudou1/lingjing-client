@@ -18,6 +18,9 @@ pub async fn gateway_test_connection(
             .profile(&profile_id)
             .ok_or_else(|| "GATEWAY_NOT_FOUND".to_string())?
     };
+    if !profile.enabled {
+        return Err("GATEWAY_DISABLED: gateway profile is disabled".into());
+    }
     let key = state
         .secrets
         .lock()
@@ -39,6 +42,9 @@ pub async fn gateway_refresh_models(
             .profile(&profile_id)
             .ok_or_else(|| "GATEWAY_NOT_FOUND".to_string())?
     };
+    if !profile.enabled {
+        return Err("GATEWAY_DISABLED: gateway profile is disabled".into());
+    }
     let key = state
         .secrets
         .lock()
