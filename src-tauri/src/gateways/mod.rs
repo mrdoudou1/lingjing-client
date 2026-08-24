@@ -29,6 +29,8 @@ impl GatewayRegistry {
                 api_key_ref: "system-keychain:mock-default".into(),
                 enabled: true,
                 is_default: true,
+                created_at: Some("1970-01-01T00:00:00Z".into()),
+                updated_at: Some("1970-01-01T00:00:00Z".into()),
             }];
         }
         self.profiles.values().cloned().collect()
@@ -134,6 +136,8 @@ mod tests {
             api_key_ref: "system-keychain:second".into(),
             enabled: true,
             is_default: false,
+            created_at: None,
+            updated_at: None,
         });
         registry.set_default("second");
         assert!(registry

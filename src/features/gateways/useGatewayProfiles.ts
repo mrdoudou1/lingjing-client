@@ -9,7 +9,7 @@ export function useGatewayProfiles() {
   const [testingId, setTestingId] = useState<string | null>(null)
   const [lastTest, setLastTest] = useState<Record<string, string>>({})
   useEffect(() => { void gatewayProfileRepository.list().then(setProfiles) }, [])
-  const persist = useCallback((next: GatewayProfile[]) => { setProfiles(next); void gatewayProfileRepository.save(next) }, [])
+  const persist = useCallback((next: GatewayProfile[]) => { const now = new Date().toISOString(); const stamped = next.map(profile => ({ ...profile, createdAt: profile.createdAt ?? now, updatedAt: now })); setProfiles(stamped); void gatewayProfileRepository.save(stamped) }, [])
   const updateProfile = useCallback((id: string, patch: Partial<GatewayProfile>) => { persist(profiles.map(profile => profile.id === id ? { ...profile, ...patch } : profile)) }, [persist, profiles])
   const setDefault = useCallback(async (id: string) => { const next = profiles.map(profile => ({ ...profile, isDefault: profile.id === id })); persist(next); if (tauriBridge.available()) await tauriBridge.invoke('gateway_set_default', { id }) }, [persist, profiles])
   const testConnection = useCallback(async (profile: GatewayProfile) => { setTestingId(profile.id); try { const result = await gatewayRegistry.runtime().testConnection(); setLastTest(previous => ({ ...previous, [profile.id]: result.ok ? `连接正常 · ${result.latencyMs}ms` : '连接失败' })) } catch (error) { setLastTest(previous => ({ ...previous, [profile.id]: `连接失败 · ${error instanceof Error ? error.message : '未知错误'}` })) } finally { setTestingId(null) } }, [])

@@ -85,6 +85,11 @@ impl SqliteStore {
             "PRAGMA foreign_keys = ON;
              CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY);
              CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS gateway_profiles (
+               id TEXT PRIMARY KEY, name TEXT NOT NULL, base_url TEXT NOT NULL, protocol TEXT NOT NULL,
+               api_key_ref TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, is_default INTEGER NOT NULL DEFAULT 0,
+               created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+             );
              CREATE TABLE IF NOT EXISTS generation_jobs (
                id TEXT PRIMARY KEY, gateway_profile_id TEXT NOT NULL, kind TEXT NOT NULL,
                operation TEXT, model_id TEXT, status TEXT NOT NULL, progress REAL NOT NULL DEFAULT 0,

@@ -69,6 +69,8 @@ export interface GatewayProfile {
   apiKeyRef: string
   enabled: boolean
   isDefault: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface ModelCapabilities {

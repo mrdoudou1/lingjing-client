@@ -32,6 +32,10 @@ pub struct GatewayProfile {
     pub api_key_ref: String,
     pub enabled: bool,
     pub is_default: bool,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
