@@ -3,6 +3,7 @@ use crate::{
     AppState,
 };
 use tauri::{AppHandle, Emitter, State};
+use tokio::sync::watch;
 use uuid::Uuid;
 
 fn persist_job(state: &AppState, job: &crate::domain::GenerationJob) -> Result<(), String> {
@@ -68,6 +69,12 @@ pub fn gateway_create_profile(
     profile: GatewayProfile,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?
+        .upsert_gateway_profile(&profile)
+        .map_err(|error| error.to_string())?;
     let mut registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     registry.create(profile);
     Ok(())
@@ -78,6 +85,12 @@ pub fn gateway_update_profile(
     profile: GatewayProfile,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?
+        .upsert_gateway_profile(&profile)
+        .map_err(|error| error.to_string())?;
     let mut registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     registry.update(profile);
     Ok(())
@@ -85,6 +98,12 @@ pub fn gateway_update_profile(
 
 #[tauri::command]
 pub fn gateway_delete_profile(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?
+        .delete_gateway_profile(&id)
+        .map_err(|error| error.to_string())?;
     let mut registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     registry.delete(&id);
     Ok(())
@@ -92,6 +111,12 @@ pub fn gateway_delete_profile(id: String, state: State<'_, AppState>) -> Result<
 
 #[tauri::command]
 pub fn gateway_set_default(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?
+        .set_default_gateway_profile(&id)
+        .map_err(|error| error.to_string())?;
     let mut registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     registry.set_default(&id);
     Ok(())
@@ -151,16 +176,71 @@ pub async fn chat_stream(
         .get(&profile.api_key_ref);
     let correlation_id = Uuid::new_v4().to_string();
     let session_id = input.session_id.clone();
+    let (stop_tx, stop_rx) = watch::channel(false);
+    {
+        let mut stops = state
+            .chat_stops
+            .lock()
+            .map_err(|_| "chat stop lock poisoned")?;
+        if let Some(previous) = stops.insert(session_id.clone(), stop_tx) {
+            let _ = previous.send(true);
+        }
+    }
     let event_app = app.clone();
-    crate::gateways::http::GatewayHttpClient::default().chat_stream(&profile, key.as_deref(), &input.model_id, &input.content, |delta| {
-        event_app.emit("chat://delta", serde_json::json!({ "sessionId": session_id, "delta": delta, "correlationId": correlation_id })).map_err(|error| error.to_string())
-    }).await?;
-    app.emit(
-        "chat://completed",
-        serde_json::json!({ "sessionId": input.session_id, "correlationId": correlation_id }),
-    )
-    .map_err(|error| error.to_string())?;
-    Ok(serde_json::json!({ "accepted": true, "correlationId": correlation_id }))
+    let result = crate::gateways::http::GatewayHttpClient::default()
+        .chat_stream(
+            &profile,
+            key.as_deref(),
+            &input.model_id,
+            &input.content,
+            stop_rx,
+            |delta| {
+                event_app
+                    .emit(
+                        "chat://delta",
+                        serde_json::json!({ "sessionId": session_id, "delta": delta, "correlationId": correlation_id }),
+                    )
+                    .map_err(|error| error.to_string())
+            },
+        )
+        .await;
+    if let Ok(mut stops) = state.chat_stops.lock() {
+        stops.remove(&input.session_id);
+    }
+    match result {
+        Ok(()) => {
+            app.emit(
+                "chat://completed",
+                serde_json::json!({ "sessionId": input.session_id, "correlationId": correlation_id }),
+            )
+            .map_err(|error| error.to_string())?;
+            Ok(serde_json::json!({ "accepted": true, "correlationId": correlation_id }))
+        }
+        Err(error) => {
+            let code = error
+                .split(':')
+                .next()
+                .filter(|value| !value.is_empty())
+                .unwrap_or("GATEWAY_ERROR");
+            let _ = app.emit(
+                "chat://error",
+                serde_json::json!({ "sessionId": input.session_id, "correlationId": correlation_id, "code": code, "message": error }),
+            );
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn chat_stop(session_id: String, state: State<'_, AppState>) -> Result<bool, String> {
+    let stops = state
+        .chat_stops
+        .lock()
+        .map_err(|_| "chat stop lock poisoned")?;
+    Ok(stops
+        .get(&session_id)
+        .map(|sender| sender.send(true).is_ok())
+        .unwrap_or(false))
 }
 
 #[tauri::command]

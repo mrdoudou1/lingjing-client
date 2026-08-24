@@ -28,6 +28,7 @@ export interface ChatSession {
 }
 
 export interface ChatRequest {
+  sessionId?: string
   gatewayProfileId: string
   modelId: string
   messages: Array<Pick<ChatMessage, 'role' | 'content'>>

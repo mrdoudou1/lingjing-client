@@ -13,25 +13,38 @@ pub struct GatewayRegistry {
 }
 
 impl GatewayRegistry {
+    pub fn mock_profile() -> GatewayProfile {
+        GatewayProfile {
+            id: "mock-default".into(),
+            name: "Mock Gateway".into(),
+            base_url: "mock://local".into(),
+            protocol: "openai-compatible".into(),
+            api_key_ref: "system-keychain:mock-default".into(),
+            enabled: true,
+            is_default: true,
+            created_at: Some("1970-01-01T00:00:00Z".into()),
+            updated_at: Some("1970-01-01T00:00:00Z".into()),
+        }
+    }
+
+    pub fn from_profiles(profiles: Vec<GatewayProfile>) -> Self {
+        Self {
+            profiles: profiles
+                .into_iter()
+                .map(|profile| (profile.id.clone(), profile))
+                .collect(),
+        }
+    }
+
     pub fn profile(&self, id: &str) -> Option<GatewayProfile> {
         self.profiles
             .get(id)
             .cloned()
-            .or_else(|| (id == "mock-default").then(|| self.profiles().remove(0)))
+            .or_else(|| (id == "mock-default" && self.profiles.is_empty()).then(Self::mock_profile))
     }
     pub fn profiles(&self) -> Vec<GatewayProfile> {
         if self.profiles.is_empty() {
-            return vec![GatewayProfile {
-                id: "mock-default".into(),
-                name: "Mock Gateway".into(),
-                base_url: "mock://local".into(),
-                protocol: "openai-compatible".into(),
-                api_key_ref: "system-keychain:mock-default".into(),
-                enabled: true,
-                is_default: true,
-                created_at: Some("1970-01-01T00:00:00Z".into()),
-                updated_at: Some("1970-01-01T00:00:00Z".into()),
-            }];
+            return vec![Self::mock_profile()];
         }
         self.profiles.values().cloned().collect()
     }

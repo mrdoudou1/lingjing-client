@@ -1,5 +1,6 @@
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 use tauri::{Emitter, Manager};
+use tokio::sync::watch;
 
 mod assets;
 mod commands;
@@ -15,20 +16,31 @@ pub struct AppState {
     pub settings: Mutex<persistence::SettingsStore>,
     pub database: Mutex<persistence::SqliteStore>,
     pub secrets: Mutex<persistence::SecretStore>,
+    pub chat_stops: Mutex<HashMap<String, watch::Sender<bool>>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let database = persistence::SqliteStore::open_default().expect("sqlite init failed");
+    let mut profiles = database
+        .list_gateway_profiles()
+        .expect("gateway profile load failed");
+    if profiles.is_empty() {
+        let default_profile = gateways::GatewayRegistry::mock_profile();
+        database
+            .upsert_gateway_profile(&default_profile)
+            .expect("default gateway profile save failed");
+        profiles.push(default_profile);
+    }
     tauri::Builder::default()
         .manage(AppState {
             jobs: Mutex::new(jobs::JobManager::default()),
-            gateways: Mutex::new(gateways::GatewayRegistry::default()),
+            gateways: Mutex::new(gateways::GatewayRegistry::from_profiles(profiles)),
             assets: Mutex::new(assets::AssetStore::default()),
             settings: Mutex::new(persistence::SettingsStore::default()),
-            database: Mutex::new(
-                persistence::SqliteStore::open_default().expect("sqlite init failed"),
-            ),
+            database: Mutex::new(database),
             secrets: Mutex::new(persistence::SecretStore::default()),
+            chat_stops: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::gateway_list_profiles,
@@ -41,6 +53,7 @@ pub fn run() {
             commands::gateway_set_api_key,
             commands::chat_send,
             commands::chat_stream,
+            commands::chat_stop,
             commands::video_create_job,
             commands::image_create_job,
             commands::audio_tts,

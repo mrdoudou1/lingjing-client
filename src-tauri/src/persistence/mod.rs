@@ -1,3 +1,4 @@
+use crate::domain::GatewayProfile;
 use rusqlite::{params, Connection, Result as SqlResult};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
@@ -128,6 +129,76 @@ impl SqliteStore {
         Ok(())
     }
 
+    pub fn list_gateway_profiles(&self) -> SqlResult<Vec<GatewayProfile>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id,name,base_url,protocol,api_key_ref,enabled,is_default,created_at,updated_at
+             FROM gateway_profiles ORDER BY is_default DESC, updated_at DESC",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(GatewayProfile {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                base_url: row.get(2)?,
+                protocol: row.get(3)?,
+                api_key_ref: row.get(4)?,
+                enabled: row.get::<_, i64>(5)? != 0,
+                is_default: row.get::<_, i64>(6)? != 0,
+                created_at: Some(row.get(7)?),
+                updated_at: Some(row.get(8)?),
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn upsert_gateway_profile(&self, profile: &GatewayProfile) -> SqlResult<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let created_at = profile.created_at.as_deref().unwrap_or(&now);
+        let updated_at = profile.updated_at.as_deref().unwrap_or(&now);
+        if profile.is_default {
+            self.connection.execute(
+                "UPDATE gateway_profiles SET is_default=0 WHERE id<>?1",
+                params![profile.id],
+            )?;
+        }
+        self.connection.execute(
+            "INSERT INTO gateway_profiles
+             (id,name,base_url,protocol,api_key_ref,enabled,is_default,created_at,updated_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+             ON CONFLICT(id) DO UPDATE SET
+               name=excluded.name, base_url=excluded.base_url, protocol=excluded.protocol,
+               api_key_ref=excluded.api_key_ref, enabled=excluded.enabled,
+               is_default=excluded.is_default, updated_at=excluded.updated_at",
+            params![
+                profile.id,
+                profile.name,
+                profile.base_url,
+                profile.protocol,
+                profile.api_key_ref,
+                profile.enabled as i64,
+                profile.is_default as i64,
+                created_at,
+                updated_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_gateway_profile(&self, id: &str) -> SqlResult<()> {
+        self.connection
+            .execute("DELETE FROM gateway_profiles WHERE id=?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn set_default_gateway_profile(&self, id: &str) -> SqlResult<()> {
+        self.connection
+            .execute("UPDATE gateway_profiles SET is_default=0", [])?;
+        self.connection.execute(
+            "UPDATE gateway_profiles SET is_default=1, updated_at=datetime('now') WHERE id=?1",
+            params![id],
+        )?;
+        Ok(())
+    }
+
     pub fn get_setting(&self, key: &str) -> SqlResult<Option<String>> {
         let mut statement = self
             .connection
@@ -223,6 +294,7 @@ impl SqliteStore {
 #[cfg(test)]
 mod tests {
     use super::SqliteStore;
+    use crate::domain::GatewayProfile;
     use serde::{Deserialize, Serialize};
 
     #[test]
@@ -255,5 +327,41 @@ mod tests {
             .unwrap()
             .expect("snapshot should restore");
         assert_eq!(restored, snapshot);
+    }
+
+    #[test]
+    fn gateway_profiles_round_trip_and_keep_one_default() {
+        let store = SqliteStore::in_memory().expect("sqlite should initialize");
+        let first = GatewayProfile {
+            id: "first".into(),
+            name: "First".into(),
+            base_url: "mock://first".into(),
+            protocol: "openai-compatible".into(),
+            api_key_ref: "system-keychain:first".into(),
+            enabled: true,
+            is_default: true,
+            created_at: None,
+            updated_at: None,
+        };
+        let second = GatewayProfile {
+            id: "second".into(),
+            name: "Second".into(),
+            base_url: "mock://second".into(),
+            protocol: "openai-compatible".into(),
+            api_key_ref: "system-keychain:second".into(),
+            enabled: true,
+            is_default: true,
+            created_at: None,
+            updated_at: None,
+        };
+        store.upsert_gateway_profile(&first).unwrap();
+        store.upsert_gateway_profile(&second).unwrap();
+        let profiles = store.list_gateway_profiles().unwrap();
+        assert_eq!(profiles.len(), 2);
+        assert_eq!(
+            profiles.iter().filter(|profile| profile.is_default).count(),
+            1
+        );
+        assert_eq!(profiles[0].id, "second");
     }
 }

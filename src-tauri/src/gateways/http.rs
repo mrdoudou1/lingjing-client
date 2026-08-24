@@ -1,8 +1,9 @@
 use crate::domain::GatewayProfile;
-use futures_util::StreamExt;
+use futures_util::{future::Either, FutureExt, StreamExt};
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use std::time::Instant;
+use tokio::sync::watch;
 
 #[derive(Debug, Deserialize)]
 struct ModelsResponse {
@@ -112,6 +113,7 @@ impl GatewayHttpClient {
         api_key: Option<&str>,
         model_id: &str,
         content: &str,
+        mut stop: watch::Receiver<bool>,
         mut on_delta: F,
     ) -> Result<(), String>
     where
@@ -123,7 +125,11 @@ impl GatewayHttpClient {
                 content.trim()
             );
             for chunk in reply.as_bytes().chunks(3) {
+                if *stop.borrow() {
+                    return Err("CANCELED: chat stream stopped".into());
+                }
                 on_delta(String::from_utf8_lossy(chunk).to_string())?;
+                tokio::task::yield_now().await;
             }
             return Ok(());
         }
@@ -148,7 +154,20 @@ impl GatewayHttpClient {
         }
         let mut stream = response.bytes_stream();
         let mut buffer = String::new();
-        while let Some(chunk) = stream.next().await {
+        loop {
+            let (next, stop_notified) = {
+                let stream_next = stream.next().fuse();
+                let stop_changed = stop.changed().fuse();
+                futures_util::pin_mut!(stream_next, stop_changed);
+                match futures_util::future::select(stream_next, stop_changed).await {
+                    Either::Left((chunk, _)) => (chunk, false),
+                    Either::Right((changed, _)) => (None, changed.is_ok()),
+                }
+            };
+            if stop_notified && *stop.borrow() {
+                return Err("CANCELED: chat stream stopped".into());
+            }
+            let Some(chunk) = next else { break };
             let chunk = chunk.map_err(|error| format!("NETWORK_OFFLINE: {error}"))?;
             buffer.push_str(&String::from_utf8_lossy(&chunk));
             while let Some(index) = buffer.find("\n") {
@@ -164,10 +183,52 @@ impl GatewayHttpClient {
                     .pointer("/choices/0/delta/content")
                     .and_then(|value| value.as_str())
                 {
+                    if *stop.borrow() {
+                        return Err("CANCELED: chat stream stopped".into());
+                    }
                     on_delta(delta.to_string())?;
                 }
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mock_chat_stream_honors_stop_signal() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime should build");
+        let profile = GatewayProfile {
+            id: "mock-default".into(),
+            name: "Mock Gateway".into(),
+            base_url: "mock://local".into(),
+            protocol: "openai-compatible".into(),
+            api_key_ref: "system-keychain:mock-default".into(),
+            enabled: true,
+            is_default: true,
+            created_at: None,
+            updated_at: None,
+        };
+        let (_stop_tx, stop_rx) = watch::channel(true);
+        let mut deltas = 0;
+        let result = runtime.block_on(GatewayHttpClient::default().chat_stream(
+            &profile,
+            None,
+            "gpt-4.1",
+            "hello",
+            stop_rx,
+            |_| {
+                deltas += 1;
+                Ok(())
+            },
+        ));
+        assert_eq!(result, Err("CANCELED: chat stream stopped".into()));
+        assert_eq!(deltas, 0);
     }
 }

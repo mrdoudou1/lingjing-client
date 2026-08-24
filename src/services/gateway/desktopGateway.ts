@@ -14,23 +14,29 @@ export class DesktopGatewayAdapter implements GatewayAdapter {
   async resolveCapabilities(modelId: string) { return capabilitiesFor(modelId) }
   async *chatStream(request: ChatRequest, signal?: AbortSignal): AsyncGenerator<ChatDelta> {
     const last = request.messages.at(-1)?.content ?? ''
-    type StreamEvent = { sessionId: string; delta?: string; correlationId: string }
+    const sessionId = request.sessionId ?? 'desktop-session'
+    type StreamEvent = { sessionId: string; delta?: string; correlationId: string; code?: string; message?: string }
     const queue: Array<ChatDelta | null> = []
     let wake: (() => void) | null = null
     let completed = false
+    let streamError: Error | null = null
     const push = (event: ChatDelta | null) => { queue.push(event); wake?.(); wake = null }
-    const unlistenDelta = await tauriBridge.listen<StreamEvent>('chat://delta', event => push({ delta: event.delta ?? '', done: false }))
-    const unlistenCompleted = await tauriBridge.listen<StreamEvent>('chat://completed', () => { completed = true; push(null) })
+    const unlistenDelta = await tauriBridge.listen<StreamEvent>('chat://delta', event => { if (event.sessionId === sessionId) push({ delta: event.delta ?? '', done: false }) })
+    const unlistenCompleted = await tauriBridge.listen<StreamEvent>('chat://completed', event => { if (event.sessionId === sessionId) { completed = true; push(null) } })
+    const unlistenError = await tauriBridge.listen<StreamEvent>('chat://error', event => { if (event.sessionId === sessionId) { streamError = new Error(event.message ?? event.code ?? 'Chat stream failed'); completed = true; push(null) } })
+    const abort = () => { completed = true; push(null); void tauriBridge.invoke('chat_stop', { sessionId }).catch(() => {}) }
+    signal?.addEventListener('abort', abort, { once: true })
     try {
-      void tauriBridge.invoke('chat_stream', { input: { gateway_profile_id: request.gatewayProfileId, model_id: request.modelId, session_id: 'desktop-session', content: last } })
+      void tauriBridge.invoke('chat_stream', { input: { gateway_profile_id: request.gatewayProfileId, model_id: request.modelId, session_id: sessionId, content: last } }).catch(error => { streamError = error instanceof Error ? error : new Error(String(error)); completed = true; push(null) })
       while (!completed || queue.length) {
         if (signal?.aborted) return
         if (!queue.length) await new Promise<void>(resolve => { wake = resolve })
         const event = queue.shift()
         if (event) yield event
       }
+      if (streamError && !signal?.aborted) throw streamError
       yield { delta: '', done: true }
-    } finally { unlistenDelta(); unlistenCompleted() }
+    } finally { signal?.removeEventListener('abort', abort); unlistenDelta(); unlistenCompleted(); unlistenError() }
   }
   async createImageJob(request: ImageRequest): Promise<GenerationJob<ImageRequest>> { return this.mapJob(await tauriBridge.invoke<Record<string, unknown>>('image_create_job', { request }), request, 'image') }
   async createVideoJob(request: VideoRequest): Promise<GenerationJob<VideoRequest>> { return this.mapJob(await tauriBridge.invoke<Record<string, unknown>>('video_create_job', { request }), request, 'video') }

@@ -60,7 +60,7 @@ export function useChatWorkspace() {
     setIsStreaming(true)
     const abortController = new AbortController(); controller.current = abortController
     try {
-      const request = { gatewayProfileId: nextSession.gatewayProfileId, modelId: nextSession.modelId, messages: nextSession.messages.filter(message => message.status !== 'streaming').map(({ role, content: messageContent }) => ({ role, content: messageContent })) }
+      const request = { sessionId, gatewayProfileId: nextSession.gatewayProfileId, modelId: nextSession.modelId, messages: nextSession.messages.filter(message => message.status !== 'streaming').map(({ role, content: messageContent }) => ({ role, content: messageContent })) }
       for await (const event of service.stream(request, abortController.signal)) {
         if (event.done) break
         updateSession(sessionId, session => ({ ...session, messages: session.messages.map(message => message.id === assistantMessage.id ? { ...message, content: message.content + event.delta } : message), updatedAt: new Date().toISOString() }))
