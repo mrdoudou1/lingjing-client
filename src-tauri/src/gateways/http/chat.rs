@@ -27,10 +27,8 @@ impl GatewayHttpClient {
             }
             return Ok(());
         }
-        let url = format!(
-            "{}/chat/completions",
-            profile.base_url.trim_end_matches('/')
-        );
+        let endpoint = crate::gateways::adapters::adapter_for(profile).endpoint("chat/completions");
+        let url = format!("{}/{endpoint}", profile.base_url.trim_end_matches('/'));
         let mut request = self.client.post(url).header("Accept", "text/event-stream").json(&serde_json::json!({"model": model_id, "stream": true, "messages": [{"role": "user", "content": content}]}));
         if let Some(key) = api_key.filter(|key| !key.is_empty()) {
             request = request.bearer_auth(key);

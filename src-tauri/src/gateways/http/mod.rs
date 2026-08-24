@@ -53,7 +53,8 @@ impl Default for GatewayHttpClient {
 
 impl GatewayHttpClient {
     fn models_url(profile: &GatewayProfile) -> String {
-        format!("{}/models", profile.base_url.trim_end_matches('/'))
+        let endpoint = crate::gateways::adapters::adapter_for(profile).endpoint("models");
+        format!("{}/{endpoint}", profile.base_url.trim_end_matches('/'))
     }
     fn request(&self, profile: &GatewayProfile, api_key: Option<&str>) -> reqwest::RequestBuilder {
         let request = self

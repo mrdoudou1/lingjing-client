@@ -5,6 +5,7 @@ use chrono::Utc;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+pub mod adapters;
 pub mod http;
 
 #[derive(Default)]

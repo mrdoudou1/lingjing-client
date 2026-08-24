@@ -11,7 +11,8 @@ impl GatewayHttpClient {
         if profile.base_url.starts_with("mock://") {
             return Err("MOCK_GATEWAY: video remains local mock".into());
         }
-        let url = format!("{}/videos", profile.base_url.trim_end_matches('/'));
+        let endpoint = crate::gateways::adapters::adapter_for(profile).endpoint("videos");
+        let url = format!("{}/{endpoint}", profile.base_url.trim_end_matches('/'));
         let mut builder = self.client.post(url).json(&serde_json::json!({
             "model": request.model_id,
             "prompt": request.prompt,
@@ -51,10 +52,9 @@ impl GatewayHttpClient {
         api_key: Option<&str>,
         remote_id: &str,
     ) -> Result<RemoteVideoStatus, String> {
-        let url = format!(
-            "{}/videos/{remote_id}",
-            profile.base_url.trim_end_matches('/')
-        );
+        let endpoint = crate::gateways::adapters::adapter_for(profile)
+            .endpoint(&format!("videos/{remote_id}"));
+        let url = format!("{}/{endpoint}", profile.base_url.trim_end_matches('/'));
         let mut builder = self.client.get(url);
         if let Some(key) = api_key.filter(|key| !key.is_empty()) {
             builder = builder.bearer_auth(key);
@@ -79,10 +79,9 @@ impl GatewayHttpClient {
         api_key: Option<&str>,
         remote_id: &str,
     ) -> Result<(), String> {
-        let url = format!(
-            "{}/videos/{remote_id}",
-            profile.base_url.trim_end_matches('/')
-        );
+        let endpoint = crate::gateways::adapters::adapter_for(profile)
+            .endpoint(&format!("videos/{remote_id}"));
+        let url = format!("{}/{endpoint}", profile.base_url.trim_end_matches('/'));
         let mut builder = self.client.delete(url);
         if let Some(key) = api_key.filter(|key| !key.is_empty()) {
             builder = builder.bearer_auth(key);
