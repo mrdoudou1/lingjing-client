@@ -43,3 +43,42 @@ impl JobManager {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{GenerationJob, JobKind};
+    use chrono::Utc;
+
+    fn job() -> GenerationJob {
+        GenerationJob {
+            id: Uuid::new_v4(),
+            gateway_profile_id: "mock-default".into(),
+            kind: JobKind::Video,
+            operation: Some("generate".into()),
+            model_id: Some("mock-video".into()),
+            status: JobStatus::Queued,
+            progress: 0.0,
+            request_json: serde_json::json!({"prompt":"demo"}),
+            error_message: None,
+            created_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn cancel_marks_job_canceled() {
+        let mut manager = JobManager::default();
+        let created = manager.insert(job());
+        let canceled = manager.cancel(created.id).expect("job should exist");
+        assert!(matches!(canceled.status, JobStatus::Canceled));
+    }
+
+    #[test]
+    fn retry_creates_new_queued_job() {
+        let mut manager = JobManager::default();
+        let created = manager.insert(job());
+        let retried = manager.retry(created.id).expect("job should exist");
+        assert_ne!(created.id, retried.id);
+        assert!(matches!(retried.status, JobStatus::Queued));
+    }
+}

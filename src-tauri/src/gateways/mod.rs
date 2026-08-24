@@ -101,3 +101,36 @@ impl GatewayRegistry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_registry_exposes_mock_profile_and_models() {
+        let registry = GatewayRegistry::default();
+        assert_eq!(registry.profiles()[0].id, "mock-default");
+        assert!(registry
+            .models("mock-default")
+            .contains(&"grok-imagine-video".to_string()));
+    }
+
+    #[test]
+    fn default_can_be_changed() {
+        let mut registry = GatewayRegistry::default();
+        registry.create(GatewayProfile {
+            id: "second".into(),
+            name: "Second".into(),
+            base_url: "mock://second".into(),
+            protocol: "openai-compatible".into(),
+            api_key_ref: "system-keychain:second".into(),
+            enabled: true,
+            is_default: false,
+        });
+        registry.set_default("second");
+        assert!(registry
+            .profiles()
+            .iter()
+            .any(|profile| profile.id == "second" && profile.is_default));
+    }
+}
