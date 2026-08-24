@@ -115,6 +115,11 @@ impl GatewayRegistry {
         }
     }
     pub fn create_audio_job(&self, request: &AudioRequest) -> GenerationJob {
+        let mut request_json = serde_json::to_value(request).unwrap_or_default();
+        if let Some(object) = request_json.as_object_mut() {
+            object.remove("source_file_base64");
+            object.remove("sourceFileBase64");
+        }
         GenerationJob {
             id: Uuid::new_v4(),
             gateway_profile_id: request.gateway_profile_id.clone(),
@@ -127,7 +132,7 @@ impl GatewayRegistry {
             model_id: Some(request.model_id.clone()),
             status: JobStatus::Queued,
             progress: 0.0,
-            request_json: serde_json::to_value(request).unwrap_or_default(),
+            request_json,
             error_message: None,
             remote_job_id: None,
             created_at: Utc::now(),
@@ -182,5 +187,24 @@ mod tests {
             .profiles()
             .iter()
             .any(|profile| profile.id == "second" && profile.is_default));
+    }
+
+    #[test]
+    fn audio_job_snapshot_does_not_contain_source_base64() {
+        let request = AudioRequest {
+            gateway_profile_id: "mock-default".into(),
+            model_id: "mock-audio".into(),
+            kind: "stt".into(),
+            text: None,
+            source_file_name: Some("clip.wav".into()),
+            source_file_base64: Some("secret-bytes".into()),
+            voice: None,
+            language: Some("en".into()),
+            format: "TXT".into(),
+            speed: None,
+        };
+        let job = GatewayRegistry::default().create_audio_job(&request);
+        assert!(job.request_json.get("source_file_base64").is_none());
+        assert!(job.request_json.get("sourceFileBase64").is_none());
     }
 }
