@@ -1,5 +1,5 @@
 use crate::{
-    domain::{ChatSendInput, VideoRequest},
+    domain::{ChatSendInput, ImageRequest, VideoRequest},
     AppState,
 };
 use tauri::State;
@@ -43,6 +43,23 @@ pub fn video_create_job(
 ) -> Result<crate::domain::GenerationJob, String> {
     let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     let job = registry.create_video_job(&request);
+    let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
+    Ok(jobs.insert(job))
+}
+
+#[tauri::command]
+pub fn image_create_job(
+    request: ImageRequest,
+    state: State<'_, AppState>,
+) -> Result<crate::domain::GenerationJob, String> {
+    if request.prompt.trim().is_empty() {
+        return Err("请输入图片描述".into());
+    }
+    if request.count == 0 || request.count > 4 {
+        return Err("图片数量必须在 1 到 4 张之间".into());
+    }
+    let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
+    let job = registry.create_image_job(&request);
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
     Ok(jobs.insert(job))
 }

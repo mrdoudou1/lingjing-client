@@ -1,4 +1,6 @@
-use crate::domain::{GatewayProfile, GenerationJob, JobKind, JobStatus, VideoRequest};
+use crate::domain::{
+    GatewayProfile, GenerationJob, ImageRequest, JobKind, JobStatus, VideoRequest,
+};
 use chrono::Utc;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -39,6 +41,20 @@ impl GatewayRegistry {
             gateway_profile_id: request.gateway_profile_id.clone(),
             kind: JobKind::Video,
             operation: Some(request.operation.clone()),
+            model_id: Some(request.model_id.clone()),
+            status: JobStatus::Queued,
+            progress: 0.0,
+            request_json: serde_json::to_value(request).unwrap_or_default(),
+            error_message: None,
+            created_at: Utc::now(),
+        }
+    }
+    pub fn create_image_job(&self, request: &ImageRequest) -> GenerationJob {
+        GenerationJob {
+            id: Uuid::new_v4(),
+            gateway_profile_id: request.gateway_profile_id.clone(),
+            kind: JobKind::Image,
+            operation: None,
             model_id: Some(request.model_id.clone()),
             status: JobStatus::Queued,
             progress: 0.0,

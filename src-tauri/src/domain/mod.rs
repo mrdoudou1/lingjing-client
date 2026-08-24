@@ -64,6 +64,18 @@ pub struct VideoRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageRequest {
+    pub gateway_profile_id: String,
+    pub model_id: String,
+    pub prompt: String,
+    pub count: u32,
+    pub aspect_ratio: Option<String>,
+    pub resolution: Option<String>,
+    pub quality: Option<String>,
+    pub reference_asset_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSendInput {
     pub gateway_profile_id: String,
     pub model_id: String,

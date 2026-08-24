@@ -29,6 +29,7 @@ pub fn run() {
             commands::gateway_refresh_models,
             commands::chat_send,
             commands::video_create_job,
+            commands::image_create_job,
             commands::job_get,
             commands::job_cancel,
             commands::job_retry,
