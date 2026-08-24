@@ -6,13 +6,14 @@ import { validateVideoRequest } from './videoValidation'
 import { VideoJobService } from '../../services/jobs/videoJobService'
 import { useModelCapabilities } from '../gateways/useModelCapabilities'
 import { tauriBridge } from '../../services/tauri/bridge'
-import { useDefaultGateway } from '../gateways/useDefaultGateway'
+import { useGatewayModels } from '../gateways/useGatewayModels'
 
 const adapter = gatewayRegistry.runtime()
 const videoJobs = new VideoJobService(adapter)
 
 export function useVideoWorkspace(notify: Notify) {
-  const gatewayProfileId = useDefaultGateway()
+  const modelState = useGatewayModels('video')
+  const gatewayProfileId = modelState.gatewayProfileId
   const [operation, setOperation] = useState<VideoOperation>('generate')
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('grok-imagine-video')
@@ -64,5 +65,5 @@ export function useVideoWorkspace(notify: Notify) {
   }, [aspectRatio, durationSec, firstFrameAssetId, gatewayProfileId, model, notify, operation, prompt, referenceImageAssetIds, referenceVoiceIds, resolution, sourceVideoAssetId])
   const cancel = useCallback(() => { if (jobId) videoJobs.cancel(jobId) }, [jobId])
   const retry = useCallback(async () => { if (!jobId) return; setStatus('running'); setProgress(0); try { const result = await videoJobs.retry(jobId, state => { setProgress(state.progress); setStatus(state.status === 'canceled' ? 'canceled' : state.status === 'succeeded' ? 'succeeded' : 'running') }, setJobId); if (result.status === 'succeeded') notify('视频任务重试完成') } catch { setStatus('failed'); notify('视频重试失败') } }, [jobId, notify])
-  return { operation, setOperation: selectOperation, prompt, setPrompt, model, setModel, selectModel, durationSec, setDurationSec, aspectRatio, setAspectRatio, resolution, setResolution, sourceVideoAssetId, setSourceVideoAssetId, progress, status, jobId, referenceImageAssetIds, referenceVoiceIds, capabilities: capabilityState.capabilities.video, capabilitiesLoading: capabilityState.loading, selectFirstFrame, selectReferenceImage, toggleReferenceVoice, start, cancel, retry }
+  return { operation, setOperation: selectOperation, prompt, setPrompt, model, setModel, models: modelState.models, modelsLoading: modelState.loading, selectModel, durationSec, setDurationSec, aspectRatio, setAspectRatio, resolution, setResolution, sourceVideoAssetId, setSourceVideoAssetId, progress, status, jobId, referenceImageAssetIds, referenceVoiceIds, capabilities: capabilityState.capabilities.video, capabilitiesLoading: capabilityState.loading || modelState.loading, selectFirstFrame, selectReferenceImage, toggleReferenceVoice, start, cancel, retry }
 }

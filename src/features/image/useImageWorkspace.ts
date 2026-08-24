@@ -4,13 +4,14 @@ import { gatewayRegistry } from '../../services/gateway/registry'
 import { ImageJobService } from '../../services/jobs/imageJobService'
 import { validateImageRequest } from './imageValidation'
 import { useModelCapabilities } from '../gateways/useModelCapabilities'
-import { useDefaultGateway } from '../gateways/useDefaultGateway'
+import { useGatewayModels } from '../gateways/useGatewayModels'
 
 const adapter = gatewayRegistry.runtime()
 const imageJobs = new ImageJobService(adapter)
 
 export function useImageWorkspace(notify: Notify) {
-  const gatewayProfileId = useDefaultGateway()
+  const modelState = useGatewayModels('image')
+  const gatewayProfileId = modelState.gatewayProfileId
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('grok-imagine-image-2.0')
   const [count, setCount] = useState(1)
@@ -43,5 +44,5 @@ export function useImageWorkspace(notify: Notify) {
       if (result.status === 'succeeded') notify(`${count} 张图片生成成功，已写入素材库`)
     } catch { setStatus('failed'); notify('图片任务失败，请重试') }
   }, [aspectRatio, count, gatewayProfileId, model, notify, prompt, quality, referenceAssetIds, resolution])
-  return { prompt, setPrompt, model, setModel, selectModel, count, setCount, aspectRatio, setAspectRatio, resolution, setResolution, quality, setQuality, referenceAssetIds, status, progress, jobId, capabilities: capabilityState.capabilities.image, capabilitiesLoading: capabilityState.loading, selectReference, start }
+  return { prompt, setPrompt, model, setModel, models: modelState.models, modelsLoading: modelState.loading, selectModel, count, setCount, aspectRatio, setAspectRatio, resolution, setResolution, quality, setQuality, referenceAssetIds, status, progress, jobId, capabilities: capabilityState.capabilities.image, capabilitiesLoading: capabilityState.loading || modelState.loading, selectReference, start }
 }
