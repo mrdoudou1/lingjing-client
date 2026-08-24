@@ -15,6 +15,22 @@ impl SettingsStore {
     }
 }
 
+#[derive(Default)]
+pub struct SecretStore {
+    values: HashMap<String, String>,
+}
+impl SecretStore {
+    pub fn set(&mut self, reference: String, secret: String) {
+        self.values.insert(reference, secret);
+    }
+    pub fn get(&self, reference: &str) -> Option<String> {
+        self.values.get(reference).cloned()
+    }
+    pub fn remove(&mut self, reference: &str) {
+        self.values.remove(reference);
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SettingsUpdate {
     pub values: HashMap<String, serde_json::Value>,

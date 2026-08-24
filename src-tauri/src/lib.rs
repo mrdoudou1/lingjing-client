@@ -13,6 +13,7 @@ pub struct AppState {
     pub assets: Mutex<assets::AssetStore>,
     pub settings: Mutex<persistence::SettingsStore>,
     pub database: Mutex<persistence::SqliteStore>,
+    pub secrets: Mutex<persistence::SecretStore>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -26,6 +27,7 @@ pub fn run() {
             database: Mutex::new(
                 persistence::SqliteStore::in_memory().expect("sqlite init failed"),
             ),
+            secrets: Mutex::new(persistence::SecretStore::default()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::gateway_list_profiles,

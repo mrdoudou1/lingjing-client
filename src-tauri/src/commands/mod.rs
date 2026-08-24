@@ -12,21 +12,45 @@ pub fn gateway_list_profiles(state: State<'_, AppState>) -> Result<serde_json::V
 }
 
 #[tauri::command]
-pub fn gateway_test_connection(
+pub async fn gateway_test_connection(
     profile_id: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
-    Ok(registry.test(&profile_id))
+    let profile = {
+        let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
+        registry
+            .profile(&profile_id)
+            .ok_or_else(|| "GATEWAY_NOT_FOUND".to_string())?
+    };
+    let key = state
+        .secrets
+        .lock()
+        .map_err(|_| "secret lock poisoned")?
+        .get(&profile.api_key_ref);
+    crate::gateways::http::GatewayHttpClient::default()
+        .test_connection(&profile, key.as_deref())
+        .await
 }
 
 #[tauri::command]
-pub fn gateway_refresh_models(
+pub async fn gateway_refresh_models(
     profile_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
-    let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
-    Ok(registry.models(&profile_id))
+    let profile = {
+        let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
+        registry
+            .profile(&profile_id)
+            .ok_or_else(|| "GATEWAY_NOT_FOUND".to_string())?
+    };
+    let key = state
+        .secrets
+        .lock()
+        .map_err(|_| "secret lock poisoned")?
+        .get(&profile.api_key_ref);
+    crate::gateways::http::GatewayHttpClient::default()
+        .list_models(&profile, key.as_deref())
+        .await
 }
 
 #[tauri::command]
@@ -64,10 +88,21 @@ pub fn gateway_set_default(id: String, state: State<'_, AppState>) -> Result<(),
 }
 
 #[tauri::command]
-pub fn gateway_set_api_key(profile_id: String, _secret: String) -> Result<String, String> {
-    // Secret handling is intentionally kept behind the Rust boundary. A real keyring adapter
-    // will replace this reference without returning or persisting the secret in the frontend.
-    Ok(format!("system-keychain:{profile_id}"))
+pub fn gateway_set_api_key(
+    profile_id: String,
+    secret: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    if secret.trim().is_empty() {
+        return Err("VALIDATION_FAILED: API key is empty".into());
+    }
+    let reference = format!("system-keychain:{profile_id}");
+    state
+        .secrets
+        .lock()
+        .map_err(|_| "secret lock poisoned")?
+        .set(reference.clone(), secret);
+    Ok(reference)
 }
 
 #[tauri::command]

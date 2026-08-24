@@ -5,12 +5,20 @@ use chrono::Utc;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+pub mod http;
+
 #[derive(Default)]
 pub struct GatewayRegistry {
     profiles: HashMap<String, GatewayProfile>,
 }
 
 impl GatewayRegistry {
+    pub fn profile(&self, id: &str) -> Option<GatewayProfile> {
+        self.profiles
+            .get(id)
+            .cloned()
+            .or_else(|| (id == "mock-default").then(|| self.profiles().remove(0)))
+    }
     pub fn profiles(&self) -> Vec<GatewayProfile> {
         if self.profiles.is_empty() {
             return vec![GatewayProfile {
