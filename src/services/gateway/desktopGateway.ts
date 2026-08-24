@@ -14,13 +14,23 @@ export class DesktopGatewayAdapter implements GatewayAdapter {
   async resolveCapabilities(modelId: string) { return capabilitiesFor(modelId) }
   async *chatStream(request: ChatRequest, signal?: AbortSignal): AsyncGenerator<ChatDelta> {
     const last = request.messages.at(-1)?.content ?? ''
-    const raw = await tauriBridge.invoke<{ reply?: string }>('chat_send', { input: { gateway_profile_id: request.gatewayProfileId, model_id: request.modelId, session_id: 'desktop-session', content: last } })
-    for (const chunk of (raw.reply ?? '').match(/.{1,3}/gs) ?? []) {
-      if (signal?.aborted) return
-      await new Promise(resolve => window.setTimeout(resolve, 30))
-      yield { delta: chunk, done: false }
-    }
-    yield { delta: '', done: true }
+    type StreamEvent = { sessionId: string; delta?: string; correlationId: string }
+    const queue: Array<ChatDelta | null> = []
+    let wake: (() => void) | null = null
+    let completed = false
+    const push = (event: ChatDelta | null) => { queue.push(event); wake?.(); wake = null }
+    const unlistenDelta = await tauriBridge.listen<StreamEvent>('chat://delta', event => push({ delta: event.delta ?? '', done: false }))
+    const unlistenCompleted = await tauriBridge.listen<StreamEvent>('chat://completed', () => { completed = true; push(null) })
+    try {
+      void tauriBridge.invoke('chat_stream', { input: { gateway_profile_id: request.gatewayProfileId, model_id: request.modelId, session_id: 'desktop-session', content: last } })
+      while (!completed || queue.length) {
+        if (signal?.aborted) return
+        if (!queue.length) await new Promise<void>(resolve => { wake = resolve })
+        const event = queue.shift()
+        if (event) yield event
+      }
+      yield { delta: '', done: true }
+    } finally { unlistenDelta(); unlistenCompleted() }
   }
   async createImageJob(request: ImageRequest): Promise<GenerationJob<ImageRequest>> { return this.mapJob(await tauriBridge.invoke<Record<string, unknown>>('image_create_job', { request }), request, 'image') }
   async createVideoJob(request: VideoRequest): Promise<GenerationJob<VideoRequest>> { return this.mapJob(await tauriBridge.invoke<Record<string, unknown>>('video_create_job', { request }), request, 'video') }

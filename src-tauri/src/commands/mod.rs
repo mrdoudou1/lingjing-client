@@ -2,7 +2,7 @@ use crate::{
     domain::{AudioRequest, ChatSendInput, GatewayProfile, ImageRequest, VideoRequest},
     AppState,
 };
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 fn persist_job(state: &AppState, job: &crate::domain::GenerationJob) -> Result<(), String> {
@@ -127,6 +127,40 @@ pub fn chat_send(input: ChatSendInput) -> Result<serde_json::Value, String> {
     Ok(
         serde_json::json!({"sessionId": input.session_id, "accepted": true, "modelId": input.model_id, "reply": reply}),
     )
+}
+
+#[tauri::command]
+pub async fn chat_stream(
+    app: AppHandle,
+    input: ChatSendInput,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    if input.content.trim().is_empty() {
+        return Err("消息不能为空".into());
+    }
+    let profile = {
+        let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
+        registry
+            .profile(&input.gateway_profile_id)
+            .ok_or_else(|| "GATEWAY_NOT_FOUND".to_string())?
+    };
+    let key = state
+        .secrets
+        .lock()
+        .map_err(|_| "secret lock poisoned")?
+        .get(&profile.api_key_ref);
+    let correlation_id = Uuid::new_v4().to_string();
+    let session_id = input.session_id.clone();
+    let event_app = app.clone();
+    crate::gateways::http::GatewayHttpClient::default().chat_stream(&profile, key.as_deref(), &input.model_id, &input.content, |delta| {
+        event_app.emit("chat://delta", serde_json::json!({ "sessionId": session_id, "delta": delta, "correlationId": correlation_id })).map_err(|error| error.to_string())
+    }).await?;
+    app.emit(
+        "chat://completed",
+        serde_json::json!({ "sessionId": input.session_id, "correlationId": correlation_id }),
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(serde_json::json!({ "accepted": true, "correlationId": correlation_id }))
 }
 
 #[tauri::command]

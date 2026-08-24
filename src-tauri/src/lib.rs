@@ -39,6 +39,7 @@ pub fn run() {
             commands::gateway_set_default,
             commands::gateway_set_api_key,
             commands::chat_send,
+            commands::chat_stream,
             commands::video_create_job,
             commands::image_create_job,
             commands::audio_tts,
