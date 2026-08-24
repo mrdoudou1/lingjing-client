@@ -20,5 +20,6 @@ export function useAssets() {
     return assets.filter(asset => (filter !== '收藏' || asset.favorite) && (!normalized || `${asset.id} ${asset.kind} ${asset.mimeType}`.toLowerCase().includes(normalized)))
   }, [assets, filter, query])
   const remove = useCallback(async (id: string) => { await assetRepository.remove(id); await refresh() }, [refresh])
-  return { assets, visibleAssets, filter, setFilter, query, setQuery, loading, refresh, remove }
+  const toggleFavorite = useCallback(async (id: string) => { await assetRepository.toggleFavorite(id); await refresh() }, [refresh])
+  return { assets, visibleAssets, filter, setFilter, query, setQuery, loading, refresh, remove, toggleFavorite }
 }

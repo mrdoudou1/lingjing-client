@@ -4,6 +4,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+mod credential_store;
+
 #[derive(Default)]
 pub struct SettingsStore {
     values: HashMap<String, serde_json::Value>,
@@ -22,14 +24,28 @@ pub struct SecretStore {
     values: HashMap<String, String>,
 }
 impl SecretStore {
-    pub fn set(&mut self, reference: String, secret: String) {
+    pub fn set(&mut self, reference: String, secret: String) -> Result<(), String> {
+        #[cfg(windows)]
+        credential_store::set(&reference, &secret)?;
         self.values.insert(reference, secret);
+        Ok(())
     }
-    pub fn get(&self, reference: &str) -> Option<String> {
-        self.values.get(reference).cloned()
+    pub fn get(&self, reference: &str) -> Result<Option<String>, String> {
+        if let Some(value) = self.values.get(reference) {
+            return Ok(Some(value.clone()));
+        }
+        #[cfg(windows)]
+        {
+            return credential_store::get(reference);
+        }
+        #[cfg(not(windows))]
+        Ok(None)
     }
-    pub fn remove(&mut self, reference: &str) {
+    pub fn remove(&mut self, reference: &str) -> Result<(), String> {
+        #[cfg(windows)]
+        credential_store::remove(reference)?;
         self.values.remove(reference);
+        Ok(())
     }
 }
 

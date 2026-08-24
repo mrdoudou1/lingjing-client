@@ -25,6 +25,9 @@ pub fn run() {
     let mut profiles = database
         .list_gateway_profiles()
         .expect("gateway profile load failed");
+    let persisted_assets: Vec<domain::Asset> = database
+        .list_snapshots("assets")
+        .expect("asset load failed");
     if profiles.is_empty() {
         let default_profile = gateways::GatewayRegistry::mock_profile();
         database
@@ -36,7 +39,7 @@ pub fn run() {
         .manage(AppState {
             jobs: Mutex::new(jobs::JobManager::default()),
             gateways: Mutex::new(gateways::GatewayRegistry::from_profiles(profiles)),
-            assets: Mutex::new(assets::AssetStore::default()),
+            assets: Mutex::new(assets::AssetStore::from_assets(persisted_assets)),
             settings: Mutex::new(persistence::SettingsStore::default()),
             database: Mutex::new(database),
             secrets: Mutex::new(persistence::SecretStore::default()),
@@ -63,6 +66,8 @@ pub fn run() {
             commands::job_retry,
             commands::job_list,
             commands::asset_list,
+            commands::asset_register,
+            commands::asset_toggle_favorite,
             commands::asset_delete,
             commands::asset_open_location,
             commands::storage_usage,

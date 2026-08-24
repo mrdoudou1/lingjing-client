@@ -109,5 +109,7 @@ pub struct Asset {
     pub local_path: String,
     pub thumbnail_path: Option<String>,
     pub size_bytes: u64,
+    #[serde(default)]
+    pub favorite: bool,
     pub created_at: DateTime<Utc>,
 }

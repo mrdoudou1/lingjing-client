@@ -37,7 +37,7 @@ pub async fn gateway_test_connection(
         .secrets
         .lock()
         .map_err(|_| "secret lock poisoned")?
-        .get(&profile.api_key_ref);
+        .get(&profile.api_key_ref)?;
     crate::gateways::http::GatewayHttpClient::default()
         .test_connection(&profile, key.as_deref())
         .await
@@ -58,7 +58,7 @@ pub async fn gateway_refresh_models(
         .secrets
         .lock()
         .map_err(|_| "secret lock poisoned")?
-        .get(&profile.api_key_ref);
+        .get(&profile.api_key_ref)?;
     crate::gateways::http::GatewayHttpClient::default()
         .list_models(&profile, key.as_deref())
         .await
@@ -98,6 +98,12 @@ pub fn gateway_update_profile(
 
 #[tauri::command]
 pub fn gateway_delete_profile(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let api_key_ref = state
+        .gateways
+        .lock()
+        .map_err(|_| "gateway lock poisoned")?
+        .profile(&id)
+        .map(|profile| profile.api_key_ref);
     state
         .database
         .lock()
@@ -106,6 +112,13 @@ pub fn gateway_delete_profile(id: String, state: State<'_, AppState>) -> Result<
         .map_err(|error| error.to_string())?;
     let mut registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     registry.delete(&id);
+    if let Some(reference) = api_key_ref {
+        state
+            .secrets
+            .lock()
+            .map_err(|_| "secret lock poisoned")?
+            .remove(&reference)?;
+    }
     Ok(())
 }
 
@@ -136,7 +149,7 @@ pub fn gateway_set_api_key(
         .secrets
         .lock()
         .map_err(|_| "secret lock poisoned")?
-        .set(reference.clone(), secret);
+        .set(reference.clone(), secret)?;
     Ok(reference)
 }
 
@@ -173,7 +186,7 @@ pub async fn chat_stream(
         .secrets
         .lock()
         .map_err(|_| "secret lock poisoned")?
-        .get(&profile.api_key_ref);
+        .get(&profile.api_key_ref)?;
     let correlation_id = Uuid::new_v4().to_string();
     let session_id = input.session_id.clone();
     let (stop_tx, stop_rx) = watch::channel(false);
@@ -402,7 +415,56 @@ pub fn asset_list(state: State<'_, AppState>) -> Result<Vec<crate::domain::Asset
 }
 
 #[tauri::command]
+pub fn asset_register(
+    asset: crate::domain::Asset,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    {
+        let database = state
+            .database
+            .lock()
+            .map_err(|_| "database lock poisoned")?;
+        database
+            .save_snapshot("assets", &asset.id, &asset)
+            .map_err(|error| error.to_string())?;
+    }
+    let mut assets = state.assets.lock().map_err(|_| "asset lock poisoned")?;
+    assets.upsert(asset);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn asset_toggle_favorite(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<crate::domain::Asset>, String> {
+    let asset = {
+        let mut assets = state.assets.lock().map_err(|_| "asset lock poisoned")?;
+        assets.toggle_favorite(&id)
+    };
+    if let Some(ref asset) = asset {
+        let database = state
+            .database
+            .lock()
+            .map_err(|_| "database lock poisoned")?;
+        database
+            .save_snapshot("assets", &asset.id, asset)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(asset)
+}
+
+#[tauri::command]
 pub fn asset_delete(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    {
+        let database = state
+            .database
+            .lock()
+            .map_err(|_| "database lock poisoned")?;
+        database
+            .delete_snapshot("assets", &id)
+            .map_err(|error| error.to_string())?;
+    }
     let mut assets = state.assets.lock().map_err(|_| "asset lock poisoned")?;
     assets.delete(&id);
     Ok(())
