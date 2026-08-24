@@ -67,6 +67,7 @@ export class PersistentAssetRepository implements AssetRepository {
   }
 
   async list() { await this.ensureLoaded(); return [...this.assets].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) }
+  async reload() { this.loaded = false; await this.ensureLoaded() }
   async save(asset: Asset) {
     await this.ensureLoaded()
     if (tauriBridge.available()) {

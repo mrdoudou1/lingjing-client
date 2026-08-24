@@ -6,6 +6,20 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::watch;
 use uuid::Uuid;
 
+fn persist_asset(state: &AppState, asset: &crate::domain::Asset) -> Result<(), String> {
+    let database = state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?;
+    database
+        .save_snapshot("assets", &asset.id, asset)
+        .map_err(|error| error.to_string())?;
+    drop(database);
+    let mut assets = state.assets.lock().map_err(|_| "asset lock poisoned")?;
+    assets.upsert(asset.clone());
+    Ok(())
+}
+
 fn persist_job(state: &AppState, job: &crate::domain::GenerationJob) -> Result<(), String> {
     let database = state
         .database
@@ -263,15 +277,16 @@ pub fn video_create_job(
 ) -> Result<crate::domain::GenerationJob, String> {
     let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
     let job = registry.create_video_job(&request);
-    let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
-    let inserted = jobs.insert(job);
-    drop(jobs);
+    let inserted = {
+        let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
+        jobs.insert(job)
+    };
     persist_job(state.inner(), &inserted)?;
     Ok(inserted)
 }
 
 #[tauri::command]
-pub fn image_create_job(
+pub async fn image_create_job(
     request: ImageRequest,
     state: State<'_, AppState>,
 ) -> Result<crate::domain::GenerationJob, String> {
@@ -281,13 +296,89 @@ pub fn image_create_job(
     if request.count == 0 || request.count > 4 {
         return Err("图片数量必须在 1 到 4 张之间".into());
     }
-    let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
-    let job = registry.create_image_job(&request);
-    let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
-    let inserted = jobs.insert(job);
-    drop(jobs);
+    let (job, profile, key) = {
+        let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
+        let profile = registry
+            .profile(&request.gateway_profile_id)
+            .ok_or_else(|| "GATEWAY_NOT_FOUND".to_string())?;
+        let key = state
+            .secrets
+            .lock()
+            .map_err(|_| "secret lock poisoned")?
+            .get(&profile.api_key_ref)?;
+        (registry.create_image_job(&request), profile, key)
+    };
+    let inserted = {
+        let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
+        jobs.insert(job)
+    };
     persist_job(state.inner(), &inserted)?;
-    Ok(inserted)
+    if profile.base_url.starts_with("mock://") {
+        return Ok(inserted);
+    }
+    let results = match crate::gateways::http::GatewayHttpClient::default()
+        .generate_images(&profile, key.as_deref(), &request)
+        .await
+    {
+        Ok(results) => results,
+        Err(error) => {
+            let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
+            if let Some(failed) = jobs.update(
+                inserted.id,
+                crate::domain::JobStatus::Failed,
+                0.0,
+                Some(error.clone()),
+            ) {
+                drop(jobs);
+                persist_job(state.inner(), &failed)?;
+            }
+            return Err(error);
+        }
+    };
+    for (index, result) in results.into_iter().enumerate() {
+        let bytes = if let Some(encoded) = result.b64_json {
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded)
+                .map_err(|error| format!("GATEWAY_INVALID_RESPONSE: {error}"))?
+        } else if let Some(url) = result.url {
+            crate::gateways::http::GatewayHttpClient::default()
+                .download_bytes(&url, key.as_deref())
+                .await?
+        } else {
+            return Err("GATEWAY_INVALID_RESPONSE: image result has no data".into());
+        };
+        let asset_id = format!("asset_{}_{}", inserted.id, index + 1);
+        let path = state
+            .media
+            .lock()
+            .map_err(|_| "media lock poisoned")?
+            .save_bytes(&asset_id, "png", &bytes)?;
+        persist_asset(
+            state.inner(),
+            &crate::domain::Asset {
+                id: asset_id.clone(),
+                job_id: Some(inserted.id),
+                kind: "image".into(),
+                mime_type: "image/png".into(),
+                local_path: path.to_string_lossy().into_owned(),
+                thumbnail_path: None,
+                size_bytes: bytes.len() as u64,
+                favorite: false,
+                created_at: chrono::Utc::now(),
+            },
+        )?;
+    }
+    let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
+    let completed = jobs
+        .update(
+            inserted.id,
+            crate::domain::JobStatus::Succeeded,
+            100.0,
+            None,
+        )
+        .ok_or_else(|| "job disappeared".to_string())?;
+    drop(jobs);
+    persist_job(state.inner(), &completed)?;
+    Ok(completed)
 }
 
 #[tauri::command]

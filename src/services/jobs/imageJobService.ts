@@ -13,6 +13,12 @@ export class ImageJobService {
   async start(request: ImageRequest, onProgress: (state: JobProgress) => void, onCreated?: (jobId: string) => void) {
     const parent = await this.adapter.createImageJob(request)
     onCreated?.(parent.id)
+    if (parent.status === 'succeeded') {
+      onProgress({ status: 'succeeded', progress: 100 })
+      await assetRepository.reload()
+      await historyRepository.recordJob(parent, 'succeeded')
+      return { ...parent, status: 'succeeded' as const, progress: 100 }
+    }
     updateDesktopJob(parent.id, 'queued', 0)
     const total = Math.max(1, request.count)
     let completed = 0

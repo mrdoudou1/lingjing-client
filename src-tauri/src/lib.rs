@@ -7,12 +7,14 @@ mod commands;
 mod domain;
 mod gateways;
 mod jobs;
+mod media;
 mod persistence;
 
 pub struct AppState {
     pub jobs: Mutex<jobs::JobManager>,
     pub gateways: Mutex<gateways::GatewayRegistry>,
     pub assets: Mutex<assets::AssetStore>,
+    pub media: Mutex<media::MediaStore>,
     pub settings: Mutex<persistence::SettingsStore>,
     pub database: Mutex<persistence::SqliteStore>,
     pub secrets: Mutex<persistence::SecretStore>,
@@ -40,6 +42,7 @@ pub fn run() {
             jobs: Mutex::new(jobs::JobManager::default()),
             gateways: Mutex::new(gateways::GatewayRegistry::from_profiles(profiles)),
             assets: Mutex::new(assets::AssetStore::from_assets(persisted_assets)),
+            media: Mutex::new(media::MediaStore::default()),
             settings: Mutex::new(persistence::SettingsStore::default()),
             database: Mutex::new(database),
             secrets: Mutex::new(persistence::SecretStore::default()),

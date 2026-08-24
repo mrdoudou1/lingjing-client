@@ -1,4 +1,4 @@
-use crate::domain::GatewayProfile;
+use crate::domain::{GatewayProfile, ImageRequest};
 use futures_util::{future::Either, FutureExt, StreamExt};
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
@@ -12,6 +12,17 @@ struct ModelsResponse {
 #[derive(Debug, Deserialize)]
 struct ModelItem {
     id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ImageResult {
+    pub url: Option<String>,
+    pub b64_json: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ImageResponse {
+    data: Vec<ImageResult>,
 }
 
 pub struct GatewayHttpClient {
@@ -191,6 +202,80 @@ impl GatewayHttpClient {
             }
         }
         Ok(())
+    }
+
+    pub async fn generate_images(
+        &self,
+        profile: &GatewayProfile,
+        api_key: Option<&str>,
+        request: &ImageRequest,
+    ) -> Result<Vec<ImageResult>, String> {
+        if profile.base_url.starts_with("mock://") {
+            return Ok(Vec::new());
+        }
+        let url = format!(
+            "{}/images/generations",
+            profile.base_url.trim_end_matches('/')
+        );
+        let size = match request.aspect_ratio.as_deref() {
+            Some("16:9") => "1792x1024",
+            Some("9:16") => "1024x1792",
+            _ if request.resolution.as_deref() == Some("2k") => "2048x2048",
+            _ => "1024x1024",
+        };
+        let mut builder = self.client.post(url).json(&serde_json::json!({
+            "model": request.model_id,
+            "prompt": request.prompt,
+            "n": request.count,
+            "size": size,
+            "quality": request.quality,
+            "response_format": "b64_json"
+        }));
+        if let Some(key) = api_key.filter(|key| !key.is_empty()) {
+            builder = builder.bearer_auth(key);
+        }
+        let response = builder
+            .send()
+            .await
+            .map_err(|error| format!("NETWORK_OFFLINE: {error}"))?;
+        let status = response.status();
+        if status == StatusCode::UNAUTHORIZED {
+            return Err("AUTH_INVALID: gateway rejected API key".into());
+        }
+        if !status.is_success() {
+            return Err(Self::status_error(status));
+        }
+        let payload: ImageResponse = response
+            .json()
+            .await
+            .map_err(|error| format!("GATEWAY_INVALID_RESPONSE: {error}"))?;
+        Ok(payload.data)
+    }
+
+    pub async fn download_bytes(
+        &self,
+        url: &str,
+        api_key: Option<&str>,
+    ) -> Result<Vec<u8>, String> {
+        let mut builder = self.client.get(url);
+        if let Some(key) = api_key.filter(|key| !key.is_empty()) {
+            builder = builder.bearer_auth(key);
+        }
+        let response = builder
+            .send()
+            .await
+            .map_err(|error| format!("DOWNLOAD_FAILED: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "DOWNLOAD_FAILED: HTTP {}",
+                response.status().as_u16()
+            ));
+        }
+        response
+            .bytes()
+            .await
+            .map(|bytes| bytes.to_vec())
+            .map_err(|error| format!("DOWNLOAD_FAILED: {error}"))
     }
 }
 

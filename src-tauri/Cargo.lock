@@ -1753,6 +1753,7 @@ dependencies = [
 name = "lingjing"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "futures-util",
  "reqwest 0.12.28",

@@ -41,5 +41,8 @@ export class DesktopGatewayAdapter implements GatewayAdapter {
   async createImageJob(request: ImageRequest): Promise<GenerationJob<ImageRequest>> { return this.mapJob(await tauriBridge.invoke<Record<string, unknown>>('image_create_job', { request }), request, 'image') }
   async createVideoJob(request: VideoRequest): Promise<GenerationJob<VideoRequest>> { return this.mapJob(await tauriBridge.invoke<Record<string, unknown>>('video_create_job', { request }), request, 'video') }
   async createAudioJob(request: AudioRequest): Promise<GenerationJob<AudioRequest>> { return this.mapJob(await tauriBridge.invoke<Record<string, unknown>>(request.kind === 'tts' ? 'audio_tts' : 'audio_stt', { request }), request, request.kind) }
-  private mapJob<T>(raw: Record<string, unknown>, request: T, kind: GenerationJob<T>['kind']): GenerationJob<T> { return { id: String(raw.id ?? crypto.randomUUID()), kind, status: 'queued', progress: Number(raw.progress ?? 0), request, createdAt: String(raw.created_at ?? new Date().toISOString()) } }
+  private mapJob<T>(raw: Record<string, unknown>, request: T, kind: GenerationJob<T>['kind']): GenerationJob<T> {
+    const status = String(raw.status ?? 'queued') as GenerationJob<T>['status']
+    return { id: String(raw.id ?? crypto.randomUUID()), kind, status, progress: Number(raw.progress ?? 0), request, createdAt: String(raw.created_at ?? new Date().toISOString()) }
+  }
 }
