@@ -12,6 +12,12 @@ export class AudioJobService {
   async start(request: AudioRequest, onProgress: (state: JobProgress) => void, onCreated?: (jobId: string) => void) {
     const job = await this.adapter.createAudioJob(request)
     onCreated?.(job.id)
+    if (job.status === 'succeeded') {
+      onProgress({ status: 'succeeded', progress: 100 })
+      await assetRepository.reload()
+      await historyRepository.recordJob(job, 'succeeded')
+      return { ...job, status: 'succeeded' as const, progress: 100 }
+    }
     updateDesktopJob(job.id, 'queued', 0)
     onProgress({ status: 'running', progress: 25 })
     updateDesktopJob(job.id, 'running', 25)

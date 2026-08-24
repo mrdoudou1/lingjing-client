@@ -15,14 +15,15 @@ type RustGenerationJob = {
 }
 
 function normalizeRequest(request: Record<string, unknown>) {
+  const { source_file_base64: _sourceFileBase64, sourceFileBase64: _sourceFileBase64Camel, ...safeRequest } = request
   return {
-    ...request,
-    gatewayProfileId: request.gateway_profile_id ?? request.gatewayProfileId,
-    modelId: request.model_id ?? request.modelId,
-    sourceFileName: request.source_file_name ?? request.sourceFileName,
-    referenceAssetIds: request.reference_asset_ids ?? request.referenceAssetIds,
-    referenceImageAssetIds: request.reference_image_asset_ids ?? request.referenceImageAssetIds,
-    referenceVoiceIds: request.reference_voice_ids ?? request.referenceVoiceIds,
+    ...safeRequest,
+    gatewayProfileId: safeRequest.gateway_profile_id ?? safeRequest.gatewayProfileId,
+    modelId: safeRequest.model_id ?? safeRequest.modelId,
+    sourceFileName: safeRequest.source_file_name ?? safeRequest.sourceFileName,
+    referenceAssetIds: safeRequest.reference_asset_ids ?? safeRequest.referenceAssetIds,
+    referenceImageAssetIds: safeRequest.reference_image_asset_ids ?? safeRequest.referenceImageAssetIds,
+    referenceVoiceIds: safeRequest.reference_voice_ids ?? safeRequest.referenceVoiceIds,
   }
 }
 
@@ -85,7 +86,8 @@ class HistoryRepository {
   }
 
   async recordJob<T>(job: GenerationJob<T>, status: HistoryRecord['status'], errorMessage?: string) {
-    const request = job.request && typeof job.request === 'object' ? job.request as Record<string, unknown> : {}
+    const rawRequest = job.request && typeof job.request === 'object' ? job.request as Record<string, unknown> : {}
+    const { sourceFileBase64: _sourceFileBase64, source_file_base64: _sourceFileBase64Snake, ...request } = rawRequest
     await this.save({
       id: 'history_' + job.id,
       jobId: job.id,

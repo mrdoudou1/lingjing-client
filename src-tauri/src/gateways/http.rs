@@ -1,4 +1,4 @@
-use crate::domain::{GatewayProfile, ImageRequest};
+use crate::domain::{AudioRequest, GatewayProfile, ImageRequest};
 use futures_util::{future::Either, FutureExt, StreamExt};
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
@@ -18,6 +18,12 @@ struct ModelItem {
 pub struct ImageResult {
     pub url: Option<String>,
     pub b64_json: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TranscriptResult {
+    pub text: String,
+    pub raw: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -277,6 +283,127 @@ impl GatewayHttpClient {
             .map(|bytes| bytes.to_vec())
             .map_err(|error| format!("DOWNLOAD_FAILED: {error}"))
     }
+
+    pub async fn synthesize_speech(
+        &self,
+        profile: &GatewayProfile,
+        api_key: Option<&str>,
+        request: &AudioRequest,
+    ) -> Result<Vec<u8>, String> {
+        if profile.base_url.starts_with("mock://") {
+            return Ok(format!(
+                "Mock speech: {}",
+                request.text.as_deref().unwrap_or_default()
+            )
+            .into_bytes());
+        }
+        let url = format!("{}/audio/speech", profile.base_url.trim_end_matches('/'));
+        let mut builder = self.client.post(url).json(&serde_json::json!({
+            "model": request.model_id,
+            "input": request.text,
+            "voice": request.voice,
+            "response_format": request.format.to_lowercase(),
+            "speed": request.speed
+        }));
+        if let Some(key) = api_key.filter(|key| !key.is_empty()) {
+            builder = builder.bearer_auth(key);
+        }
+        let response = builder
+            .send()
+            .await
+            .map_err(|error| format!("NETWORK_OFFLINE: {error}"))?;
+        if response.status() == StatusCode::UNAUTHORIZED {
+            return Err("AUTH_INVALID: gateway rejected API key".into());
+        }
+        if !response.status().is_success() {
+            return Err(Self::status_error(response.status()));
+        }
+        response
+            .bytes()
+            .await
+            .map(|bytes| bytes.to_vec())
+            .map_err(|error| format!("GATEWAY_INVALID_RESPONSE: {error}"))
+    }
+
+    pub async fn transcribe_audio(
+        &self,
+        profile: &GatewayProfile,
+        api_key: Option<&str>,
+        request: &AudioRequest,
+    ) -> Result<TranscriptResult, String> {
+        let encoded = request
+            .source_file_base64
+            .as_deref()
+            .ok_or_else(|| "VALIDATION_FAILED: audio file content is missing".to_string())?;
+        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded)
+            .map_err(|error| format!("VALIDATION_FAILED: invalid audio payload: {error}"))?;
+        if profile.base_url.starts_with("mock://") {
+            return Ok(TranscriptResult {
+                text: format!(
+                    "Mock transcript for {}",
+                    request.source_file_name.as_deref().unwrap_or("audio")
+                ),
+                raw: String::new(),
+            });
+        }
+        let url = format!(
+            "{}/audio/transcriptions",
+            profile.base_url.trim_end_matches('/')
+        );
+        let file_name = request
+            .source_file_name
+            .as_deref()
+            .unwrap_or("audio.bin")
+            .to_string();
+        let boundary = format!("----LingjingBoundary{}", uuid::Uuid::new_v4().simple());
+        let mut body = Vec::new();
+        let mut append_text = |name: &str, value: &str| {
+            body.extend_from_slice(format!("--{boundary}\\r\\nContent-Disposition: form-data; name=\\\"{name}\\\"\\r\\n\\r\\n{value}\\r\\n").as_bytes());
+        };
+        append_text("model", &request.model_id);
+        append_text("response_format", &request.format.to_lowercase());
+        if let Some(language) = request.language.as_deref() {
+            append_text("language", language);
+        }
+        body.extend_from_slice(format!("--{boundary}\\r\\nContent-Disposition: form-data; name=\\\"file\\\"; filename=\\\"{file_name}\\\"\\r\\nContent-Type: application/octet-stream\\r\\n\\r\\n").as_bytes());
+        body.extend_from_slice(&bytes);
+        body.extend_from_slice(format!("\\r\\n--{boundary}--\\r\\n").as_bytes());
+        let mut builder = self
+            .client
+            .post(url)
+            .header(
+                "Content-Type",
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(body);
+        if let Some(key) = api_key.filter(|key| !key.is_empty()) {
+            builder = builder.bearer_auth(key);
+        }
+        let response = builder
+            .send()
+            .await
+            .map_err(|error| format!("NETWORK_OFFLINE: {error}"))?;
+        if response.status() == StatusCode::UNAUTHORIZED {
+            return Err("AUTH_INVALID: gateway rejected API key".into());
+        }
+        if !response.status().is_success() {
+            return Err(Self::status_error(response.status()));
+        }
+        let raw = response
+            .text()
+            .await
+            .map_err(|error| format!("GATEWAY_INVALID_RESPONSE: {error}"))?;
+        let text = serde_json::from_str::<serde_json::Value>(&raw)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("text")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| raw.clone());
+        Ok(TranscriptResult { text, raw })
+    }
 }
 
 #[cfg(test)]
@@ -315,5 +442,54 @@ mod tests {
         ));
         assert_eq!(result, Err("CANCELED: chat stream stopped".into()));
         assert_eq!(deltas, 0);
+    }
+
+    #[test]
+    fn mock_audio_adapters_return_deterministic_results() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime should build");
+        let profile = GatewayProfile {
+            id: "mock-default".into(),
+            name: "Mock Gateway".into(),
+            base_url: "mock://local".into(),
+            protocol: "openai-compatible".into(),
+            api_key_ref: "system-keychain:mock-default".into(),
+            enabled: true,
+            is_default: true,
+            created_at: None,
+            updated_at: None,
+        };
+        let tts = AudioRequest {
+            gateway_profile_id: "mock-default".into(),
+            model_id: "mock-audio".into(),
+            kind: "tts".into(),
+            text: Some("hello".into()),
+            source_file_name: None,
+            source_file_base64: None,
+            voice: Some("Aria".into()),
+            language: None,
+            format: "MP3".into(),
+            speed: None,
+        };
+        let stt = AudioRequest {
+            kind: "stt".into(),
+            source_file_name: Some("clip.wav".into()),
+            source_file_base64: Some("aGk=".into()),
+            ..tts.clone()
+        };
+        runtime.block_on(async {
+            let speech = GatewayHttpClient::default()
+                .synthesize_speech(&profile, None, &tts)
+                .await
+                .unwrap();
+            assert!(String::from_utf8(speech).unwrap().contains("hello"));
+            let transcript = GatewayHttpClient::default()
+                .transcribe_audio(&profile, None, &stt)
+                .await
+                .unwrap();
+            assert!(transcript.text.contains("clip.wav"));
+        });
     }
 }

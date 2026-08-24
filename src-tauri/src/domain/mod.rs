@@ -86,6 +86,8 @@ pub struct AudioRequest {
     pub kind: String,
     pub text: Option<String>,
     pub source_file_name: Option<String>,
+    #[serde(default)]
+    pub source_file_base64: Option<String>,
     pub voice: Option<String>,
     pub language: Option<String>,
     pub format: String,

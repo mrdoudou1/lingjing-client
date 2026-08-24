@@ -17,9 +17,14 @@ export function useAudioWorkspace(notify: Notify) {
   const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [status, setStatus] = useState<'idle' | 'running' | 'succeeded' | 'failed'>('idle')
   const [progress, setProgress] = useState(0)
-  const request = useCallback((): AudioRequest => tab === 'tts' ? { gatewayProfileId: 'mock-default', modelId: 'mock-audio', kind: 'tts', text, voice, format } : { gatewayProfileId: 'mock-default', modelId: 'mock-audio', kind: 'stt', sourceFileName: sourceFile?.name, language, format }, [format, language, sourceFile, tab, text, voice])
+  const request = useCallback(async (): Promise<AudioRequest> => {
+    if (tab === 'tts') return { gatewayProfileId: 'mock-default', modelId: 'mock-audio', kind: 'tts', text, voice, format }
+    const bytes = sourceFile ? new Uint8Array(await sourceFile.arrayBuffer()) : undefined
+    const binary = bytes ? Array.from(bytes, byte => String.fromCharCode(byte)).join('') : undefined
+    return { gatewayProfileId: 'mock-default', modelId: 'mock-audio', kind: 'stt', sourceFileName: sourceFile?.name, sourceFileBase64: binary ? btoa(binary) : undefined, language, format }
+  }, [format, language, sourceFile, tab, text, voice])
   const submit = useCallback(async () => {
-    const input = request(); const validation = validateAudioRequest(input, audioCapabilities)
+    const input = await request(); const validation = validateAudioRequest(input, audioCapabilities)
     if (!validation.ok) return notify(validation.message)
     setStatus('running'); setProgress(0)
     try { const result = await audioJobs.start(input, state => { setProgress(state.progress); setStatus(state.status === 'succeeded' ? 'succeeded' : 'running') }); if (result.status === 'succeeded') notify(tab === 'tts' ? '语音合成成功，已保存到素材库' : '语音识别成功，已保存到历史记录') } catch { setStatus('failed'); notify('音频任务失败，请重试') }

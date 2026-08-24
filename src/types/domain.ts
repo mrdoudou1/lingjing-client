@@ -56,6 +56,7 @@ export interface AudioRequest {
   kind: 'tts' | 'stt'
   text?: string
   sourceFileName?: string
+  sourceFileBase64?: string
   voice?: string
   language?: string
   format: string
