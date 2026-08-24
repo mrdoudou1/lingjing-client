@@ -4,8 +4,14 @@ export interface VideoRequest {
   gatewayProfileId: string
   modelId: string
   operation: VideoOperation
+  inputMode?: 'text-to-video' | 'image-to-video' | 'reference-to-video'
   prompt: string
+  firstFrameAssetId?: string
+  referenceImageAssetIds?: string[]
+  referenceVoiceIds?: string[]
+  sourceVideoAssetId?: string
   durationSec?: number
+  extensionDurationSec?: number
   aspectRatio?: string
   resolution?: string
 }
