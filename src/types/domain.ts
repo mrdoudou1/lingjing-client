@@ -1,4 +1,4 @@
-export type Section = '聊天' | '图片' | '视频' | 'TTS / STT' | '图库' | '视频库' | '渠道' | '历史记录' | '设置'
+export type Section = '聊天' | '图片' | '视频' | 'TTS / STT' | '素材库' | '图库' | '视频库' | '渠道' | '历史记录' | '设置'
 export type Theme = 'system' | 'light' | 'dark'
 export type VideoOperation = 'generate' | 'edit' | 'extend'
 export type ImageResolution = '1k' | '2k' | string

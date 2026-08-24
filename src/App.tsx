@@ -26,6 +26,7 @@ function App() {
       case '图片': return <ImagePage notify={ui.notify} />
       case '视频': return <VideoPage notify={ui.notify} />
       case 'TTS / STT': return <AudioPage notify={ui.notify} />
+      case '素材库':
       case '图库': return <AssetsPage notify={ui.notify} />
       case '视频库': return <VideoLibraryPage notify={ui.notify} />
       case '渠道': return <ChannelPage notify={ui.notify} />
