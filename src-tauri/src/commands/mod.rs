@@ -72,8 +72,15 @@ pub fn gateway_set_api_key(profile_id: String, _secret: String) -> Result<String
 
 #[tauri::command]
 pub fn chat_send(input: ChatSendInput) -> Result<serde_json::Value, String> {
+    if input.content.trim().is_empty() {
+        return Err("消息不能为空".into());
+    }
+    let reply = format!(
+        "已收到你的请求：**{}**\n\n这是 Rust Mock Gateway 的桌面流式响应。",
+        input.content.trim()
+    );
     Ok(
-        serde_json::json!({"sessionId": input.session_id, "accepted": true, "modelId": input.model_id}),
+        serde_json::json!({"sessionId": input.session_id, "accepted": true, "modelId": input.model_id, "reply": reply}),
     )
 }
 

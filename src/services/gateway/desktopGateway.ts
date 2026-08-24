@@ -12,7 +12,16 @@ export class DesktopGatewayAdapter implements GatewayAdapter {
   async testConnection() { return tauriBridge.invoke<{ ok: boolean; latencyMs: number }>('gateway_test_connection', { profileId: 'mock-default' }) }
   async listModels() { return tauriBridge.invoke<string[]>('gateway_refresh_models', { profileId: 'mock-default' }) }
   async resolveCapabilities(modelId: string) { return capabilitiesFor(modelId) }
-  async *chatStream(_request: ChatRequest, _signal?: AbortSignal): AsyncGenerator<ChatDelta> { yield* []; throw new Error('Desktop chat stream event bridge is not enabled yet') }
+  async *chatStream(request: ChatRequest, signal?: AbortSignal): AsyncGenerator<ChatDelta> {
+    const last = request.messages.at(-1)?.content ?? ''
+    const raw = await tauriBridge.invoke<{ reply?: string }>('chat_send', { input: { gateway_profile_id: request.gatewayProfileId, model_id: request.modelId, session_id: 'desktop-session', content: last } })
+    for (const chunk of (raw.reply ?? '').match(/.{1,3}/gs) ?? []) {
+      if (signal?.aborted) return
+      await new Promise(resolve => window.setTimeout(resolve, 30))
+      yield { delta: chunk, done: false }
+    }
+    yield { delta: '', done: true }
+  }
   async createImageJob(request: ImageRequest): Promise<GenerationJob<ImageRequest>> { return this.mapJob(await tauriBridge.invoke<Record<string, unknown>>('image_create_job', { request }), request, 'image') }
   async createVideoJob(request: VideoRequest): Promise<GenerationJob<VideoRequest>> { return this.mapJob(await tauriBridge.invoke<Record<string, unknown>>('video_create_job', { request }), request, 'video') }
   async createAudioJob(request: AudioRequest): Promise<GenerationJob<AudioRequest>> { return this.mapJob(await tauriBridge.invoke<Record<string, unknown>>(request.kind === 'tts' ? 'audio_tts' : 'audio_stt', { request }), request, request.kind) }
