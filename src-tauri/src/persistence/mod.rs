@@ -36,10 +36,12 @@ impl SecretStore {
         }
         #[cfg(windows)]
         {
-            return credential_store::get(reference);
+            credential_store::get(reference)
         }
         #[cfg(not(windows))]
-        Ok(None)
+        {
+            Ok(None)
+        }
     }
     pub fn remove(&mut self, reference: &str) -> Result<(), String> {
         #[cfg(windows)]
