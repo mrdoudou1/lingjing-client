@@ -362,8 +362,23 @@ pub fn job_cancel(
     drop(jobs);
     if let Some(ref job) = result {
         persist_job(state.inner(), job)?;
+        return Ok(result);
     }
-    Ok(result)
+    let database = state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?;
+    let Some(mut job) = database
+        .get_snapshot::<crate::domain::GenerationJob>("jobs", &id.to_string())
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(None);
+    };
+    job.status = crate::domain::JobStatus::Canceled;
+    database
+        .save_snapshot("jobs", &job.id.to_string(), &job)
+        .map_err(|error| error.to_string())?;
+    Ok(Some(job))
 }
 
 #[tauri::command]
@@ -377,8 +392,26 @@ pub fn job_retry(
     drop(jobs);
     if let Some(ref job) = result {
         persist_job(state.inner(), job)?;
+        return Ok(result);
     }
-    Ok(result)
+    let database = state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?;
+    let Some(mut job) = database
+        .get_snapshot::<crate::domain::GenerationJob>("jobs", &id.to_string())
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(None);
+    };
+    job.id = Uuid::new_v4();
+    job.status = crate::domain::JobStatus::Queued;
+    job.progress = 0.0;
+    job.error_message = None;
+    database
+        .save_snapshot("jobs", &job.id.to_string(), &job)
+        .map_err(|error| error.to_string())?;
+    Ok(Some(job))
 }
 
 #[tauri::command]
