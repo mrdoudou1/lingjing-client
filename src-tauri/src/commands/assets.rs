@@ -49,6 +49,17 @@ pub fn asset_toggle_favorite(
 
 #[tauri::command]
 pub fn asset_delete(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let asset = {
+        let assets = state.assets.lock().map_err(|_| "asset lock poisoned")?;
+        assets.list().into_iter().find(|asset| asset.id == id)
+    };
+    if let Some(ref asset) = asset {
+        state
+            .media
+            .lock()
+            .map_err(|_| "media lock poisoned")?
+            .remove_asset_files(asset)?;
+    }
     {
         let database = state
             .database
@@ -143,6 +154,6 @@ pub fn asset_export(id: String, state: State<'_, AppState>) -> Result<String, St
 
 #[tauri::command]
 pub fn storage_usage(state: State<'_, AppState>) -> Result<u64, String> {
-    let assets = state.assets.lock().map_err(|_| "asset lock poisoned")?;
-    Ok(assets.usage())
+    let media = state.media.lock().map_err(|_| "media lock poisoned")?;
+    Ok(media.usage_bytes())
 }
