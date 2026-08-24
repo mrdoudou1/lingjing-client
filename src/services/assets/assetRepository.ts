@@ -43,6 +43,7 @@ export interface AssetRepository {
   save(asset: Asset): Promise<void>
   remove(id: string): Promise<void>
   toggleFavorite(id: string): Promise<void>
+  openLocation(id: string): Promise<string | undefined>
   usage(): Promise<number>
 }
 
@@ -96,6 +97,11 @@ export class PersistentAssetRepository implements AssetRepository {
     const next = this.assets.map(asset => asset.id === id ? { ...asset, favorite: !asset.favorite } : asset)
     this.assets = next
     await appPersistence.set('assets', next)
+  }
+  async openLocation(id: string) {
+    await this.ensureLoaded()
+    if (!tauriBridge.available()) return this.assets.find(asset => asset.id === id)?.localPath
+    return tauriBridge.invoke<string | null>('asset_open_location', { id }).then(path => path ?? undefined)
   }
   async usage() { const assets = await this.list(); return assets.reduce((total, asset) => total + asset.sizeBytes, 0) }
 }

@@ -21,5 +21,6 @@ export function useAssets() {
   }, [assets, filter, query])
   const remove = useCallback(async (id: string) => { await assetRepository.remove(id); await refresh() }, [refresh])
   const toggleFavorite = useCallback(async (id: string) => { await assetRepository.toggleFavorite(id); await refresh() }, [refresh])
-  return { assets, visibleAssets, filter, setFilter, query, setQuery, loading, refresh, remove, toggleFavorite }
+  const openLocation = useCallback((id: string) => assetRepository.openLocation(id), [])
+  return { assets, visibleAssets, filter, setFilter, query, setQuery, loading, refresh, remove, toggleFavorite, openLocation }
 }

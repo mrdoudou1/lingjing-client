@@ -530,11 +530,44 @@ pub fn asset_open_location(
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
     let assets = state.assets.lock().map_err(|_| "asset lock poisoned")?;
-    Ok(assets
+    let path = assets
         .list()
         .into_iter()
         .find(|asset| asset.id == id)
-        .map(|asset| asset.local_path))
+        .map(|asset| asset.local_path);
+    let Some(path) = path else { return Ok(None) };
+    if path.starts_with("mock://") {
+        return Err("ASSET_NOT_LOCAL: asset has no local file".into());
+    }
+    let file = std::path::Path::new(&path);
+    if !file.exists() {
+        return Err("ASSET_NOT_FOUND: local file does not exist".into());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg("/select,")
+            .arg(file)
+            .status()
+            .map_err(|error| format!("ASSET_OPEN_FAILED: {error}"))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(file)
+            .status()
+            .map_err(|error| format!("ASSET_OPEN_FAILED: {error}"))?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let parent = file.parent().unwrap_or(file);
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .status()
+            .map_err(|error| format!("ASSET_OPEN_FAILED: {error}"))?;
+    }
+    Ok(Some(path))
 }
 
 #[tauri::command]
