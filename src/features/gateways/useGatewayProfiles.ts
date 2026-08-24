@@ -73,6 +73,10 @@ export function useGatewayProfiles() {
   const testConnection = useCallback(async (profile: GatewayProfile) => { setTestingId(profile.id); try { const result = await gatewayRegistry.runtime().testConnection(); setLastTest(previous => ({ ...previous, [profile.id]: result.ok ? `连接正常 · ${result.latencyMs}ms` : '连接失败' })) } catch (error) { setLastTest(previous => ({ ...previous, [profile.id]: `连接失败 · ${error instanceof Error ? error.message : '未知错误'}` })) } finally { setTestingId(null) } }, [])
   const refreshModels = useCallback(async (profile: GatewayProfile) => { const models = await gatewayRegistry.runtime().listModels(); setLastTest(previous => ({ ...previous, [profile.id]: `模型已刷新 · ${models.length} 个` })); return models }, [])
   const setApiKey = useCallback(async (profile: GatewayProfile, secret: string) => { if (!secret.trim()) throw new Error('API Key 不能为空'); if (tauriBridge.available()) { const reference = await tauriBridge.invoke<string>('gateway_set_api_key', { profileId: profile.id, secret }); updateProfile(profile.id, { apiKeyRef: reference, enabled: true }) } else { updateProfile(profile.id, { apiKeyRef: `system-keychain:${profile.id}`, enabled: true }) } }, [updateProfile])
+  const clearApiKey = useCallback(async (profile: GatewayProfile) => {
+    if (tauriBridge.available()) await tauriBridge.invoke('gateway_clear_api_key', { profileId: profile.id })
+    updateProfile(profile.id, { enabled: false })
+  }, [updateProfile])
   const addProfile = useCallback(() => {
     const id = 'gateway-' + Date.now()
     const profile: GatewayProfile = { id, name: '新网关', baseUrl: 'https://example.com', protocol: 'openai-compatible', apiKeyRef: 'system-keychain:' + id, enabled: false, isDefault: profiles.length === 0 }
@@ -84,5 +88,5 @@ export function useGatewayProfiles() {
     persist(next)
     if (tauriBridge.available()) await tauriBridge.invoke('gateway_delete_profile', { id: profile.id })
   }, [persist, profiles])
-  return { profiles, testingId, lastTest, setDefault, updateProfile, testConnection, refreshModels, setApiKey, addProfile, deleteProfile }
+  return { profiles, testingId, lastTest, setDefault, updateProfile, testConnection, refreshModels, setApiKey, clearApiKey, addProfile, deleteProfile }
 }

@@ -184,6 +184,31 @@ pub fn gateway_set_api_key(
 }
 
 #[tauri::command]
+pub fn gateway_clear_api_key(profile_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let mut profile = {
+        let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
+        registry
+            .profile(&profile_id)
+            .ok_or_else(|| "GATEWAY_NOT_FOUND".to_string())?
+    };
+    state
+        .secrets
+        .lock()
+        .map_err(|_| "secret lock poisoned")?
+        .remove(&profile.api_key_ref)?;
+    profile.enabled = false;
+    state
+        .database
+        .lock()
+        .map_err(|_| "database lock poisoned")?
+        .upsert_gateway_profile(&profile)
+        .map_err(|error| error.to_string())?;
+    let mut registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
+    registry.update(profile);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn chat_send(input: ChatSendInput) -> Result<serde_json::Value, String> {
     if input.content.trim().is_empty() {
         return Err("消息不能为空".into());

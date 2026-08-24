@@ -57,6 +57,7 @@ pub fn run() {
             commands::gateway_delete_profile,
             commands::gateway_set_default,
             commands::gateway_set_api_key,
+            commands::gateway_clear_api_key,
             commands::chat_send,
             commands::chat_list_sessions,
             commands::chat_save_session,
