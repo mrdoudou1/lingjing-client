@@ -42,3 +42,5 @@ npm run lint
 npm run tauri:dev
 npm run tauri:build
 ```
+
+`npm run tauri:build` 只生成免安装桌面程序，不再生成 NSIS/MSI 安装包。输出文件位于 `src-tauri/target/release/lingjing.exe`；可复制到 `release/` 目录后直接运行。

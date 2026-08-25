@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build --no-bundle",
+    "tauri:build:portable": "tauri build --no-bundle"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
