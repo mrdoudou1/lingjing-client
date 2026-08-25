@@ -17,6 +17,8 @@ export class VideoJobService {
     onCreated?.(job.id)
     if (job.status === 'queued') {
       let current = await pollDesktopVideoJob(job.id, request)
+      // Mock desktop jobs have no remote id and should use the local simulator.
+      if (current && !current.remoteJobId) current = null
       while (current && (current.status === 'queued' || current.status === 'running')) {
         onProgress({ status: current.status, progress: current.progress })
         await new Promise(resolve => window.setTimeout(resolve, 1000))

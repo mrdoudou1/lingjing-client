@@ -45,11 +45,15 @@ fn shutdown_active_work(app_handle: &tauri::AppHandle, state: &AppState) {
         for job in &stopped {
             let _ = database.save_snapshot("jobs", &job.id.to_string(), job);
             if let Some(remote_id) = &job.remote_job_id {
-                remote_jobs.push((remote_id.clone(), job.gateway_profile_id.clone()));
+                remote_jobs.push((
+                    remote_id.clone(),
+                    job.gateway_profile_id.clone(),
+                    job.model_id.clone().unwrap_or_default(),
+                ));
             }
         }
     }
-    for (remote_id, profile_id) in remote_jobs {
+    for (remote_id, profile_id, model_id) in remote_jobs {
         let profile = state
             .gateways
             .lock()
@@ -66,6 +70,7 @@ fn shutdown_active_work(app_handle: &tauri::AppHandle, state: &AppState) {
             &profile,
             key.as_deref(),
             &remote_id,
+            &model_id,
         ));
     }
 }

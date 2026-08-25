@@ -21,6 +21,7 @@ export async function pollDesktopVideoJob<TRequest>(id: string, request: TReques
     kind: 'video',
     status: String(raw.status ?? 'running') as GenerationJob<TRequest>['status'],
     progress: Number(raw.progress ?? 0),
+    remoteJobId: raw.remote_job_id ? String(raw.remote_job_id) : undefined,
     request,
     errorMessage: raw.error_message ? String(raw.error_message) : undefined,
     createdAt: String(raw.created_at ?? new Date().toISOString()),

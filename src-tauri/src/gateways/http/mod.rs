@@ -52,9 +52,18 @@ impl Default for GatewayHttpClient {
 }
 
 impl GatewayHttpClient {
+    pub(crate) fn url(profile: &GatewayProfile, endpoint: &str) -> String {
+        let base = profile.base_url.trim_end_matches('/');
+        let endpoint = crate::gateways::adapters::adapter_for(profile).endpoint(endpoint);
+        let endpoint = if base.ends_with("/v1") && endpoint.starts_with("v1/") {
+            endpoint.trim_start_matches("v1/")
+        } else {
+            endpoint.as_str()
+        };
+        format!("{base}/{endpoint}")
+    }
     fn models_url(profile: &GatewayProfile) -> String {
-        let endpoint = crate::gateways::adapters::adapter_for(profile).endpoint("models");
-        format!("{}/{endpoint}", profile.base_url.trim_end_matches('/'))
+        Self::url(profile, "models")
     }
     fn request(&self, profile: &GatewayProfile, api_key: Option<&str>) -> reqwest::RequestBuilder {
         let request = self

@@ -15,7 +15,7 @@ function matchesKind(model: string, kind: GatewayModelKind): boolean {
   const normalized = model.toLowerCase()
   if (kind === 'chat') return !matchesKind(model, 'image') && !matchesKind(model, 'video') && !matchesKind(model, 'audio')
   if (kind === 'image') return normalized.includes('image') || normalized.includes('flux')
-  if (kind === 'video') return normalized.includes('video') || normalized.includes('veo') || normalized.includes('sora')
+  if (kind === 'video') return normalized.includes('video') || normalized.includes('veo') || normalized.includes('sora') || normalized.includes('kling') || normalized.includes('jimeng') || normalized.includes('hailuo') || normalized.includes('runway') || normalized.includes('vidu') || normalized.includes('wan')
   return normalized.includes('audio') || normalized.includes('speech') || normalized.includes('tts') || normalized.includes('whisper')
 }
 

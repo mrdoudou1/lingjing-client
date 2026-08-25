@@ -73,7 +73,15 @@ impl GatewayRegistry {
                 "stt": { "languages": ["zh", "en"], "formats": ["TXT", "JSON", "SRT", "VTT"], "timestamps": true, "realtime": false }
             });
         }
-        if normalized.contains("video") || normalized.contains("veo") || normalized.contains("sora")
+        if normalized.contains("video")
+            || normalized.contains("veo")
+            || normalized.contains("sora")
+            || normalized.contains("kling")
+            || normalized.contains("jimeng")
+            || normalized.contains("hailuo")
+            || normalized.contains("runway")
+            || normalized.contains("vidu")
+            || normalized.contains("wan")
         {
             return serde_json::json!({
                 "video": { "operations": ["generate", "edit", "extend"], "durations": [6, 12, 18], "aspectRatios": ["16:9", "9:16", "1:1"], "resolutions": ["720p", "1080p"], "maxReferenceImages": 3, "maxReferenceVoices": 1 }

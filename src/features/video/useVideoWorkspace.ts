@@ -7,12 +7,14 @@ import { VideoJobService } from '../../services/jobs/videoJobService'
 import { useModelCapabilities } from '../gateways/useModelCapabilities'
 import { tauriBridge } from '../../services/tauri/bridge'
 import { useGatewayModels } from '../gateways/useGatewayModels'
+import { useAssets } from '../assets/useAssets'
 
 const adapter = gatewayRegistry.runtime()
 const videoJobs = new VideoJobService(adapter)
 
 export function useVideoWorkspace(notify: Notify) {
   const modelState = useGatewayModels('video')
+  const assetState = useAssets()
   const gatewayProfileId = modelState.gatewayProfileId
   const [operation, setOperation] = useState<VideoOperation>('generate')
   const [prompt, setPrompt] = useState('')
@@ -40,6 +42,14 @@ export function useVideoWorkspace(notify: Notify) {
     notify(`已切换模型：${nextModel}，参数已按能力校正`)
   }, [gatewayProfileId, notify])
 
+  useEffect(() => {
+    if (modelState.models.length && !modelState.models.includes(model)) {
+      const timer = window.setTimeout(() => { void selectModel(modelState.models[0]) }, 0)
+      return () => window.clearTimeout(timer)
+    }
+    return undefined
+  }, [model, modelState.models, selectModel])
+
   useEffect(() => () => { if (jobId && status === 'running') videoJobs.cancel(jobId) }, [jobId, status])
   useEffect(() => {
     let unlisten: (() => void) | undefined
@@ -47,9 +57,10 @@ export function useVideoWorkspace(notify: Notify) {
     return () => { unlisten?.() }
   }, [jobId])
   const selectOperation = useCallback((next: VideoOperation) => { setOperation(next); setStatus('idle'); setProgress(0) }, [])
-  const selectFirstFrame = useCallback(() => { setFirstFrameAssetId('asset-first-frame-demo'); setReferenceImageAssetIds([]); notify('已选择示例首帧图') }, [notify])
-  const selectReferenceImage = useCallback(() => { setReferenceImageAssetIds(['asset-reference-demo']); setFirstFrameAssetId(''); notify('已选择示例参考图') }, [notify])
-  const toggleReferenceVoice = useCallback(() => { setReferenceVoiceIds(previous => previous.length ? [] : ['voice-demo']); notify(referenceVoiceIds.length ? '已移除参考音色' : '已选择示例参考音色') }, [notify, referenceVoiceIds.length])
+  const selectFirstFrame = useCallback(() => { const asset = assetState.visibleAssets.find(item => item.kind === 'image'); if (!asset) return notify('素材库中暂无图片素材'); setFirstFrameAssetId(asset.id); setReferenceImageAssetIds([]); notify('已选择素材库中的首帧图') }, [assetState.visibleAssets, notify])
+  const selectReferenceImage = useCallback(() => { const asset = assetState.visibleAssets.find(item => item.kind === 'image'); if (!asset) return notify('素材库中暂无图片素材'); setReferenceImageAssetIds([asset.id]); setFirstFrameAssetId(''); notify('已选择素材库中的参考图') }, [assetState.visibleAssets, notify])
+  const selectSourceVideo = useCallback(() => { const asset = assetState.visibleAssets.find(item => item.kind === 'video'); if (!asset) return notify('素材库中暂无视频素材'); setSourceVideoAssetId(asset.id); notify('已选择素材库中的源视频') }, [assetState.visibleAssets, notify])
+  const toggleReferenceVoice = useCallback(() => { setReferenceVoiceIds(previous => previous.length ? [] : ['voice-reference']); notify(referenceVoiceIds.length ? '已移除参考音色' : '已选择参考音色') }, [notify, referenceVoiceIds.length])
   const start = useCallback(async () => {
     const request: VideoRequest = { gatewayProfileId, modelId: model, operation, inputMode: firstFrameAssetId ? 'image-to-video' : referenceImageAssetIds.length ? 'reference-to-video' : 'text-to-video', prompt, firstFrameAssetId: firstFrameAssetId || undefined, referenceImageAssetIds, referenceVoiceIds, sourceVideoAssetId: sourceVideoAssetId || undefined, durationSec, extensionDurationSec: operation === 'extend' ? durationSec : undefined, aspectRatio, resolution }
     const capabilities = await adapter.resolveCapabilities(request.modelId, gatewayProfileId)
@@ -65,5 +76,5 @@ export function useVideoWorkspace(notify: Notify) {
   }, [aspectRatio, durationSec, firstFrameAssetId, gatewayProfileId, model, notify, operation, prompt, referenceImageAssetIds, referenceVoiceIds, resolution, sourceVideoAssetId])
   const cancel = useCallback(() => { if (jobId) videoJobs.cancel(jobId) }, [jobId])
   const retry = useCallback(async () => { if (!jobId) return; setStatus('running'); setProgress(0); try { const result = await videoJobs.retry(jobId, state => { setProgress(state.progress); setStatus(state.status === 'canceled' ? 'canceled' : state.status === 'succeeded' ? 'succeeded' : 'running') }, setJobId); if (result.status === 'succeeded') notify('视频任务重试完成') } catch { setStatus('failed'); notify('视频重试失败') } }, [jobId, notify])
-  return { operation, setOperation: selectOperation, prompt, setPrompt, model, setModel, models: modelState.models, modelsLoading: modelState.loading, selectModel, durationSec, setDurationSec, aspectRatio, setAspectRatio, resolution, setResolution, sourceVideoAssetId, setSourceVideoAssetId, progress, status, jobId, referenceImageAssetIds, referenceVoiceIds, capabilities: capabilityState.capabilities.video, capabilitiesLoading: capabilityState.loading || modelState.loading, selectFirstFrame, selectReferenceImage, toggleReferenceVoice, start, cancel, retry }
+  return { operation, setOperation: selectOperation, prompt, setPrompt, model, setModel, models: modelState.models, modelsLoading: modelState.loading, selectModel, durationSec, setDurationSec, aspectRatio, setAspectRatio, resolution, setResolution, sourceVideoAssetId, setSourceVideoAssetId, progress, status, jobId, referenceImageAssetIds, referenceVoiceIds, capabilities: capabilityState.capabilities.video, capabilitiesLoading: capabilityState.loading || modelState.loading, selectFirstFrame, selectReferenceImage, selectSourceVideo, toggleReferenceVoice, start, cancel, retry }
 }

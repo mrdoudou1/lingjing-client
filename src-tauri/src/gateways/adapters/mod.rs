@@ -21,14 +21,17 @@ impl ProtocolAdapter {
     }
 
     pub fn endpoint(self, name: &str) -> String {
-        // All built-in protocols currently expose the OpenAI-compatible paths.
-        // Keeping path selection here isolates vendor differences to this adapter layer.
         match self {
-            Self::OpenAiCompatible
-            | Self::NewApi
-            | Self::Sub2Api
-            | Self::Grok2Api
-            | Self::Custom => name.to_string(),
+            Self::NewApi | Self::Sub2Api => format!("v1/{name}"),
+            Self::OpenAiCompatible | Self::Grok2Api | Self::Custom => name.to_string(),
+        }
+    }
+
+    pub fn video_endpoint(self, model_id: &str) -> &'static str {
+        match self {
+            Self::NewApi if model_id.to_ascii_lowercase().contains("sora") => "videos",
+            Self::NewApi => "video/generations",
+            _ => "videos",
         }
     }
 }
@@ -76,6 +79,11 @@ mod tests {
         assert_eq!(
             ProtocolAdapter::from_profile(&profile("unknown")),
             ProtocolAdapter::OpenAiCompatible
+        );
+        assert_eq!(ProtocolAdapter::NewApi.video_endpoint("sora-2"), "videos");
+        assert_eq!(
+            ProtocolAdapter::NewApi.video_endpoint("kling-v2"),
+            "video/generations"
         );
     }
 }

@@ -18,6 +18,9 @@ impl AssetStore {
     pub fn list(&self) -> Vec<Asset> {
         self.assets.values().cloned().collect()
     }
+    pub fn get(&self, id: &str) -> Option<Asset> {
+        self.assets.get(id).cloned()
+    }
     pub fn upsert(&mut self, asset: Asset) {
         self.assets.insert(asset.id.clone(), asset);
     }

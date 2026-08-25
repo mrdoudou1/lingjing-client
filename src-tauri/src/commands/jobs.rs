@@ -33,9 +33,13 @@ pub async fn job_cancel(
     let remote_context = {
         let jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
         if let Some(job) = jobs.get(id) {
-            job.remote_job_id
-                .clone()
-                .map(|remote_id| (remote_id, job.gateway_profile_id))
+            job.remote_job_id.clone().map(|remote_id| {
+                (
+                    remote_id,
+                    job.gateway_profile_id,
+                    job.model_id.unwrap_or_default(),
+                )
+            })
         } else {
             drop(jobs);
             let database = state
@@ -46,12 +50,17 @@ pub async fn job_cancel(
                 .get_snapshot::<crate::domain::GenerationJob>("jobs", &id.to_string())
                 .map_err(|error| error.to_string())?
                 .and_then(|job| {
-                    job.remote_job_id
-                        .map(|remote_id| (remote_id, job.gateway_profile_id))
+                    job.remote_job_id.map(|remote_id| {
+                        (
+                            remote_id,
+                            job.gateway_profile_id,
+                            job.model_id.unwrap_or_default(),
+                        )
+                    })
                 })
         }
     };
-    if let Some((remote_id, profile_id)) = remote_context {
+    if let Some((remote_id, profile_id, model_id)) = remote_context {
         let profile = {
             let registry = state.gateways.lock().map_err(|_| "gateway lock poisoned")?;
             registry.profile(&profile_id)
@@ -63,7 +72,7 @@ pub async fn job_cancel(
                 .map_err(|_| "secret lock poisoned")?
                 .get(&profile.api_key_ref)?;
             let _ = crate::gateways::http::GatewayHttpClient::default()
-                .cancel_video(&profile, key.as_deref(), &remote_id)
+                .cancel_video(&profile, key.as_deref(), &remote_id, &model_id)
                 .await;
         }
     }

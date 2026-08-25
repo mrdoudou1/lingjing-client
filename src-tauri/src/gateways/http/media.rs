@@ -10,9 +10,7 @@ impl GatewayHttpClient {
         if profile.base_url.starts_with("mock://") {
             return Ok(Vec::new());
         }
-        let endpoint =
-            crate::gateways::adapters::adapter_for(profile).endpoint("images/generations");
-        let url = format!("{}/{endpoint}", profile.base_url.trim_end_matches('/'));
+        let url = super::GatewayHttpClient::url(profile, "images/generations");
         let size = match request.aspect_ratio.as_deref() {
             Some("16:9") => "1792x1024",
             Some("9:16") => "1024x1792",
@@ -87,8 +85,7 @@ impl GatewayHttpClient {
             )
             .into_bytes());
         }
-        let endpoint = crate::gateways::adapters::adapter_for(profile).endpoint("audio/speech");
-        let url = format!("{}/{endpoint}", profile.base_url.trim_end_matches('/'));
+        let url = super::GatewayHttpClient::url(profile, "audio/speech");
         let mut builder = self.client.post(url).json(&serde_json::json!({
             "model": request.model_id,
             "input": request.text,
@@ -137,9 +134,7 @@ impl GatewayHttpClient {
                 raw: String::new(),
             });
         }
-        let endpoint =
-            crate::gateways::adapters::adapter_for(profile).endpoint("audio/transcriptions");
-        let url = format!("{}/{endpoint}", profile.base_url.trim_end_matches('/'));
+        let url = super::GatewayHttpClient::url(profile, "audio/transcriptions");
         let file_name = request
             .source_file_name
             .as_deref()

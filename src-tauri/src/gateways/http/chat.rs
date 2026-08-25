@@ -27,8 +27,7 @@ impl GatewayHttpClient {
             }
             return Ok(());
         }
-        let endpoint = crate::gateways::adapters::adapter_for(profile).endpoint("chat/completions");
-        let url = format!("{}/{endpoint}", profile.base_url.trim_end_matches('/'));
+        let url = super::GatewayHttpClient::url(profile, "chat/completions");
         let chat_messages = if input.messages.is_empty() {
             vec![serde_json::json!({ "role": "user", "content": input.content })]
         } else {

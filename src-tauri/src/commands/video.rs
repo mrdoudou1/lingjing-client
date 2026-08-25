@@ -3,6 +3,22 @@ use crate::{domain::VideoRequest, AppState};
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
+fn local_image_data(state: &AppState, request: &VideoRequest) -> Option<String> {
+    let asset_id = request.first_frame_asset_id.as_deref().or_else(|| {
+        request
+            .reference_image_asset_ids
+            .first()
+            .map(String::as_str)
+    })?;
+    let asset = state.assets.lock().ok()?.get(asset_id)?;
+    if asset.local_path.starts_with("mock://") {
+        return None;
+    }
+    let bytes = std::fs::read(&asset.local_path).ok()?;
+    let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes);
+    Some(format!("data:{};base64,{encoded}", asset.mime_type))
+}
+
 fn validate_video_request(
     request: &VideoRequest,
     capabilities: &serde_json::Value,
@@ -139,11 +155,41 @@ pub async fn video_create_job(
     persist_job(state.inner(), &inserted)?;
     emit_job_event(&app, "job://created", &inserted);
     if profile.base_url.starts_with("mock://") {
-        return Ok(inserted);
+        let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
+        let completed = jobs
+            .update(
+                inserted.id,
+                crate::domain::JobStatus::Succeeded,
+                100.0,
+                None,
+            )
+            .ok_or_else(|| "job disappeared".to_string())?;
+        drop(jobs);
+        persist_job(state.inner(), &completed)?;
+        emit_job_event(&app, "job://status", &completed);
+        return Ok(completed);
     }
-    let remote = crate::gateways::http::GatewayHttpClient::default()
-        .create_video(&profile, key.as_deref(), &request)
-        .await?;
+    let image_data = local_image_data(state.inner(), &request);
+    let remote = match crate::gateways::http::GatewayHttpClient::default()
+        .create_video(&profile, key.as_deref(), &request, image_data.as_deref())
+        .await
+    {
+        Ok(remote) => remote,
+        Err(error) => {
+            let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
+            if let Some(failed) = jobs.update(
+                inserted.id,
+                crate::domain::JobStatus::Failed,
+                0.0,
+                Some(error.clone()),
+            ) {
+                drop(jobs);
+                persist_job(state.inner(), &failed)?;
+                emit_job_event(&app, "job://failed", &failed);
+            }
+            return Err(error);
+        }
+    };
     let mut jobs = state.jobs.lock().map_err(|_| "job lock poisoned")?;
     let updated = jobs
         .set_remote_job_id(inserted.id, remote.remote_id)
@@ -197,21 +243,33 @@ pub async fn video_poll_job(
         .map_err(|_| "secret lock poisoned")?
         .get(&profile.api_key_ref)?;
     let remote = crate::gateways::http::GatewayHttpClient::default()
-        .get_video_status(&profile, key.as_deref(), &remote_id)
+        .get_video_status(
+            &profile,
+            key.as_deref(),
+            &remote_id,
+            job.model_id.as_deref().unwrap_or_default(),
+        )
         .await?;
     let status = match remote.status.as_str() {
-        "succeeded" | "completed" | "success" => crate::domain::JobStatus::Succeeded,
+        "succeeded" | "completed" | "success" | "done" => crate::domain::JobStatus::Succeeded,
         "failed" | "error" => crate::domain::JobStatus::Failed,
         "canceled" | "cancelled" => crate::domain::JobStatus::Canceled,
         _ => crate::domain::JobStatus::Running,
     };
     if matches!(status, crate::domain::JobStatus::Succeeded) {
-        let url = remote
-            .result_url
-            .ok_or_else(|| "GATEWAY_INVALID_RESPONSE: video result URL missing".to_string())?;
-        let bytes = crate::gateways::http::GatewayHttpClient::default()
-            .download_bytes(&url, key.as_deref())
-            .await?;
+        let client = crate::gateways::http::GatewayHttpClient::default();
+        let bytes = if let Some(url) = remote.result_url {
+            client.download_bytes(&url, key.as_deref()).await?
+        } else {
+            client
+                .download_video_content(
+                    &profile,
+                    key.as_deref(),
+                    &remote_id,
+                    job.model_id.as_deref().unwrap_or_default(),
+                )
+                .await?
+        };
         let asset_id = format!("asset_{}", job.id);
         let path = state
             .media

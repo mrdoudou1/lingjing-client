@@ -6,7 +6,7 @@ function capabilitiesFor(modelId: string): ModelCapabilities {
   const normalized = modelId.toLowerCase()
   if (normalized.includes('image') || normalized.includes('flux')) return { image: { count: { min: 1, max: 4, default: 1 }, aspectRatios: ['1 : 1', '16 : 9', '9 : 16'], resolutions: ['1k', '2k'], qualities: ['draft', 'standard', 'high'], supportsEdit: true } }
   if (normalized.includes('audio') || normalized.includes('speech') || normalized.includes('tts') || normalized.includes('whisper')) return { tts: { voices: ['Aria · 温暖女声', 'River · 平静男声'], formats: ['MP3', 'WAV'], streaming: false }, stt: { languages: ['中文（普通话）', 'English'], formats: ['TXT', 'JSON', 'SRT', 'VTT'], timestamps: true, realtime: false } }
-  if (normalized.includes('video') || normalized.includes('veo') || normalized.includes('sora')) return { video: { operations: ['generate', 'edit', 'extend'], durations: [6, 12, 18], aspectRatios: ['16:9', '9:16', '1:1'], resolutions: ['720p', '1080p'], maxReferenceImages: 3, maxReferenceVoices: 1 } }
+  if (normalized.includes('video') || normalized.includes('veo') || normalized.includes('sora') || normalized.includes('kling') || normalized.includes('jimeng') || normalized.includes('hailuo') || normalized.includes('runway') || normalized.includes('vidu') || normalized.includes('wan')) return { video: { operations: ['generate', 'edit', 'extend'], durations: [6, 12, 18], aspectRatios: ['16:9', '9:16', '1:1'], resolutions: ['720p', '1080p'], maxReferenceImages: 3, maxReferenceVoices: 1 } }
   return { chat: { streaming: true, markdown: true } }
 }
 

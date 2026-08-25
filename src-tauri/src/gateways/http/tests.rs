@@ -106,3 +106,26 @@ fn video_status_parser_accepts_common_gateway_fields() {
         Some("https://example.test/video.mp4")
     );
 }
+
+#[test]
+fn newapi_urls_keep_a_single_v1_prefix() {
+    let profile = GatewayProfile {
+        id: "newapi".into(),
+        name: "NewAPI".into(),
+        base_url: "https://gateway.example/v1".into(),
+        protocol: "newapi".into(),
+        api_key_ref: "key:newapi".into(),
+        enabled: true,
+        is_default: true,
+        created_at: None,
+        updated_at: None,
+    };
+    assert_eq!(
+        GatewayHttpClient::url(&profile, "models"),
+        "https://gateway.example/v1/models"
+    );
+    assert_eq!(
+        GatewayHttpClient::url(&profile, "video/generations"),
+        "https://gateway.example/v1/video/generations"
+    );
+}
